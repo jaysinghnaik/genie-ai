@@ -51,7 +51,10 @@ export default function App() {
 
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [googleUser, setGoogleUser] = useState<any>(null);
+  const [googleUser, setGoogleUser] = useState<any>(() => {
+    const saved = localStorage.getItem('google_access_token');
+    return saved ? { access_token: saved } : null;
+  });
   const [geminiResult, setGeminiResult] = useState<string>("");
   const [isGeminiLoading, setIsGeminiLoading] = useState(false);
   
@@ -70,14 +73,14 @@ export default function App() {
   // OAuth Listener
   useEffect(() => {
     const handleOAuthMessage = (event: MessageEvent) => {
-      // Basic origin check for safety in production, but allowing all for dev ease
-      // if (!event.origin.endsWith('.run.app') && !event.origin.includes('localhost')) return;
-      
       if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
         const tokens = event.data.payload;
-        setGoogleUser(tokens);
-        // Automatically send the prompt after login as requested
-        sendShimlaPrompt(tokens.access_token);
+        if (tokens?.access_token) {
+          localStorage.setItem('google_access_token', tokens.access_token);
+          setGoogleUser(tokens);
+          // Automatically send the prompt after login
+          sendShimlaPrompt(tokens.access_token);
+        }
       }
     };
 

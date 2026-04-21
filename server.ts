@@ -19,7 +19,7 @@ async function startServer() {
   app.get("/api/auth/google/url", (req, res) => {
     const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
     const options = {
-      redirect_uri: `${process.env.APP_URL}/auth/callback`,
+      redirect_uri: "https://ais-dev-t5idak3sgbhap7xxjajs4s-115097995425.asia-southeast1.run.app/auth/callback",
       client_id: process.env.VITE_GOOGLE_CLIENT_ID!,
       access_type: "offline",
       response_type: "code",
@@ -63,7 +63,7 @@ async function startServer() {
           code,
           client_id: process.env.VITE_GOOGLE_CLIENT_ID!,
           client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-          redirect_uri: `${process.env.APP_URL}/auth/callback`,
+          redirect_uri: "https://ais-dev-t5idak3sgbhap7xxjajs4s-115097995425.asia-southeast1.run.app/auth/callback",
           grant_type: "authorization_code",
         }),
       });
