@@ -1,0 +1,27 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user-specific settings and sensitive keys.",
+      "type": "object",
+      "properties": {
+        "geminiApiKey": {
+          "type": "string",
+          "description": "The user's personal Gemini API key."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last time the profile was updated."
+        }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user profiles and settings."
+    }
+  }
+}
