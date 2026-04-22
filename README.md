@@ -1,20 +1,42 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Genie AI Presentation Builder
 
-# Run and deploy your AI Studio app
+A professional AI-powered presentation builder that generates structured content and themes using Genie AI (Gemini).
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/8f673801-4250-4d91-999b-9494a5948301
+- **AI Content Generation**: Enter a topic and let Genie AI generate slides, structure, and content.
+- **PDF Export**: Download high-fidelity PDF presentations.
+- **PPTX Export**: Download editable PowerPoint files.
+- **Theme Support**: Professional light and dark modes.
+- **Interactive UI**: Built with React, Tailwind CSS, and Framer Motion.
 
-## Run Locally
+## Deployment on Vercel
 
-**Prerequisites:**  Node.js
+This project is optimized for deployment on Vercel.
 
+### Prerequisites
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+1. A Vercel account.
+2. A Gemini API Key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+### Deployment Steps
+
+1. **Push to GitHub**: Push this repository to your GitHub account.
+2. **Import to Vercel**:
+   - Go to [Vercel Dashboard](https://vercel.com/dashboard).
+   - Click **Add New...** > **Project**.
+   - Import your GitHub repository.
+3. **Configure Environment Variables**:
+   - During the import process, expand **Environment Variables**.
+   - Add `GEMINI_API_KEY` with your key from Google AI Studio.
+4. **Deploy**:
+   - Click **Deploy**. Vercel will automatically detect Vite and build the project.
+
+### Technical Details
+
+- **Framework**: React 19 + Vite 6
+- **Styling**: Tailwind CSS 4
+- **AI**: @google/genai (Gemini 1.5 Flash/Preview)
+- **PDF Generation**: jsPDF + html2canvas
+- **PPTX Generation**: PptxGenJS
+- **Routing**: `vercel.json` included for SPA support.

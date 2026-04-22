@@ -236,7 +236,7 @@ export default function App() {
   const automatedStructureGeneration = async () => {
     const aiInstance = getAiInstance();
     if (!aiInstance) {
-      setApiError({ message: "Gemini API Key is missing. Please provide it in settings to continue.", type: 'missing' });
+      setApiError({ message: "GENIE AI API Key is missing. Please provide it in settings to continue.", type: 'missing' });
       setIsSettingsOpen(true);
       return;
     }
@@ -263,7 +263,7 @@ export default function App() {
   const automatedSubtopicGeneration = async () => {
     const aiInstance = getAiInstance();
     if (!aiInstance) {
-      setApiError({ message: "Gemini API Key is missing. Please provide it in settings to continue.", type: 'missing' });
+      setApiError({ message: "GENIE AI API Key is missing. Please provide it in settings to continue.", type: 'missing' });
       setIsSettingsOpen(true);
       return;
     }
@@ -526,22 +526,36 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
   };
 
   const downloadNotes = () => {
-    const notesContent = `PRESENTATION NOTES: ${topic.toUpperCase()}\n` + 
-      "=".repeat(50) + "\n\n" +
-      slidesData
-      .slice(0, pptConfig.slides)
-      .map((s, i) => `[SLIDE ${i + 1}] ${s.title || "Untitled"}\n\n${s.text}\n\n${"-".repeat(30)}`)
-      .join('\n\n');
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text(`PRESENTATION NOTES: ${topic.toUpperCase()}`, 10, 20);
+    doc.setFontSize(12);
+    doc.line(10, 25, 200, 25);
     
-    const blob = new Blob([notesContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${topic.replace(/\s+/g, '_')}_Presentation_Notes.txt`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    let y = 35;
+    slidesData.slice(0, pptConfig.slides).forEach((s, i) => {
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text(`[SLIDE ${i + 1}] ${s.title || "Untitled"}`, 10, y);
+      y += 7;
+      
+      doc.setFont("helvetica", "normal");
+      const lines = doc.splitTextToSize(s.text || "", 180);
+      lines.forEach((line: string) => {
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(line, 10, y);
+        y += 6;
+      });
+      y += 10;
+    });
+    
+    doc.save(`${topic.replace(/\s+/g, '_')}_Presentation_Notes.pdf`);
   };
 
   const handleReset = () => {
@@ -778,7 +792,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                       <div className="p-5 pt-0">
                         <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-zinc-400' : 'text-gray-600'}`}>
                           Genie AI bridges the gap between complex research and professional presentation design. 
-                          Leveraging Gemini's reasoning, we empower users to create content-rich presentations in minutes.
+                          Leveraging GENIE AI's reasoning, we empower users to create content-rich presentations in minutes.
                           <br /><br />
                           <span className="font-bold underline decoration-blue-500/30 text-blue-500 uppercase tracking-tighter text-[9px]">
                             "Your content, our intelligence."
@@ -1025,7 +1039,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     <div className="text-left">
                       <h4 className="text-2xl font-bold mb-1">Create with AI</h4>
                       <p className={`text-sm leading-relaxed max-w-sm ${isDarkMode ? 'text-zinc-600' : 'text-gray-400'}`}>
-                        Enter a topic and let Gemini generate structured content and themes for you.
+                        Enter a topic and let GENIE AI generate structured content and themes for you.
                       </p>
                     </div>
                   </div>
@@ -1057,7 +1071,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 <Wand2 className="w-10 h-10" />
               </div>
               <h2 className={`text-4xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>What's the topic?</h2>
-              <p className="text-gray-500 text-lg">Tell us what your presentation is about, and we will generate the prompts for Gemini.</p>
+              <p className="text-gray-500 text-lg">Tell us what your presentation is about, and we will generate the content</p>
             </header>
 
             <form onSubmit={handleTopicSubmit} className="space-y-6">
@@ -1115,7 +1129,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 <div className="space-y-4">
                   <p className="text-xs text-gray-400 leading-relaxed uppercase tracking-wide font-bold">Automation Active</p>
                   <p className="text-sm text-gray-500">
-                    The prompt is ready. Click "Run AI for this Step" to automatically generate the content using Gemini.
+                    The prompt is ready. Click "Run AI for this Step" to automatically generate the content using GENIE AI.
                   </p>
                 </div>
               </div>
@@ -1124,7 +1138,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className="flex-1 p-10 flex flex-col">
                 <div className="flex items-center justify-between mb-6">
                   <h4 className="font-bold text-gray-400 text-sm uppercase tracking-widest">
-                    {isAILoading ? "Gemini is Thinking..." : "AI Response"}
+                    {isAILoading ? "GENIE AI is Thinking..." : "AI Response"}
                   </h4>
                   {aiPasteBuffer && !isAILoading && (
                     <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full font-bold">READY</span>
@@ -1265,11 +1279,11 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                         <RefreshCw className="w-5 h-5 animate-spin" /> 
                         Building Website... ({generationTimer}s)
                       </span>
-                    ) : (isDarkMode ? "Build with Gemini" : "Ready to Build?")}
+                    ) : (isDarkMode ? "Build with GENIE AI" : "Ready to Build?")}
                   </h4>
                   <p className="text-gray-400 text-sm">
                     {isAILoading 
-                      ? "Gemini is now synthesizing your HTML, CSS, and interactive logic based on the refined prompts."
+                      ? "GENIE AI is now synthesizing your HTML, CSS, and interactive logic based on the refined prompts."
                       : (isDarkMode ? "Initialize the automated deployment sequence or launch manually." : "Head over to Google AI Studio Build or run it here automatically.")}
                   </p>
                 </div>
@@ -1283,7 +1297,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   </button>
                   
                   <a 
-                    href="https://aistudio.google.com/gemini/vibe-code"
+                    href="https://aistudio.google.com/build"
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold hover:scale-105 active:scale-95 transition-all shadow-lg ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-white text-black shadow-black/10'}`}
@@ -1348,7 +1362,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400 hover:bg-zinc-700' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}
                   >
                     <FileText className="w-5 h-5" />
-                    Read Notes
+                    Notes PDF
                   </button>
 
                   <button
@@ -1442,7 +1456,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     onClick={downloadNotes}
                     className="bg-blue-600 text-white py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                   >
-                    <FileText className="w-5 h-5" /> Download Read Notes
+                    <FileText className="w-5 h-5" /> Download Notes (PDF)
                   </button>
                   <button
                     onClick={handleFinalizePPTX}
