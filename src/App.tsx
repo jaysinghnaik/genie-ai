@@ -640,7 +640,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                       <div className="space-y-4">
                         <button
                           onClick={handleGoogleLogin}
-                          className="w-full py-3 bg-white border border-gray-100 rounded-xl shadow-sm flex items-center justify-center gap-3 hover:bg-gray-50 transition-all font-bold text-sm"
+                          className={`w-full py-3 border rounded-xl shadow-sm flex items-center justify-center gap-3 transition-all font-bold text-sm ${isDarkMode ? 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700 text-white' : 'bg-white border-gray-100 hover:bg-gray-50 text-black'}`}
                         >
                           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
                           Sign in with Google
@@ -736,7 +736,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                       <button
                         onClick={saveApiKey}
                         disabled={!tempApiKey.trim()}
-                        className={`w-full py-3.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${isKeySaved ? 'bg-emerald-500 text-white' : (tempApiKey.trim() ? 'bg-black text-white shadow-lg shadow-black/10' : 'bg-gray-200 text-gray-400 cursor-not-allowed')}`}
+                        className={`w-full py-3.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 ${isKeySaved ? 'bg-emerald-500 text-white' : (tempApiKey.trim() ? (isDarkMode ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'bg-black text-white shadow-lg shadow-black/10') : (isDarkMode ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'))}`}
                       >
                         {isKeySaved ? <><Check className="w-4 h-4" /> Saved</> : "Apply Key"}
                       </button>
@@ -744,7 +744,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   </div>
 
                   {/* Tutorial Option */}
-                  <div className={`p-5 rounded-2xl flex items-center justify-between group cursor-pointer transition-all ${isDarkMode ? 'bg-zinc-800/20 hover:bg-zinc-800/50' : 'bg-white border border-gray-100 hover:border-gray-300'}`}>
+                  <div className={`p-5 rounded-2xl flex items-center justify-between group cursor-pointer transition-all ${isDarkMode ? 'bg-zinc-800/40 border border-zinc-700 hover:bg-zinc-800/60' : 'bg-white border border-gray-100 hover:border-gray-300'}`}>
                     <div className="flex items-center gap-3">
                       <div className={`p-2.5 rounded-xl ${isDarkMode ? 'bg-zinc-700 text-orange-400' : 'bg-orange-50 text-orange-600 shadow-sm border border-orange-100'}`}>
                         <RefreshCw className="w-4 h-4" />
@@ -833,7 +833,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.1 }}
-                className={`text-6xl md:text-8xl font-display font-medium tracking-tight mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}
+                className={`text-6xl md:text-8xl font-display font-medium tracking-tight mb-6 ${isDarkMode ? 'text-zinc-100' : 'text-black'}`}
               >
                 GENIE AI
               </motion.h1>
@@ -842,10 +842,10 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                className="flex flex-col md:flex-row md:items-center gap-4 text-xl md:text-2xl text-gray-400"
+                className={`flex flex-col md:flex-row md:items-center gap-4 text-xl md:text-2xl ${isDarkMode ? 'text-zinc-500' : 'text-gray-400'}`}
               >
                 <span className="font-light italic font-serif">POWERED BY</span>
-                <span className={`font-bold tracking-widest text-3xl md:text-4xl underline decoration-[rgba(59,130,246,0.3)] underline-offset-8 decoration-4 ${isDarkMode ? 'text-zinc-100' : 'text-black'}`}>
+                <span className={`font-bold tracking-widest text-3xl md:text-4xl underline decoration-[rgba(59,130,246,0.3)] underline-offset-8 decoration-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>
                   JAY SINGH
                 </span>
               </motion.div>
@@ -919,14 +919,14 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
           >
             <button
               onClick={() => setView("dashboard")}
-              className="flex items-center gap-2 text-gray-400 hover:text-black transition-colors mb-12 group"
+              className={`flex items-center gap-2 transition-colors mb-12 group ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
             >
               <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
               <span className="font-medium">Back to dashboard</span>
             </button>
 
             <header className="mb-16">
-              <h2 className="text-5xl font-display font-medium text-black mb-4">
+              <h2 className={`text-5xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>
                 Configuration
               </h2>
               <p className="text-gray-400 text-xl font-light">
@@ -949,7 +949,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     <button
                       key={r.label}
                       onClick={() => setPptConfig(prev => ({ ...prev, ratio: r.label }))}
-                      className={`flex flex-col items-center justify-center p-8 rounded-3xl border-2 transition-all duration-300 ${pptConfig.ratio === r.label ? 'border-black bg-white shadow-xl' : 'border-gray-100 bg-[rgba(255,255,255,0.5)] text-gray-400 opacity-60 hover:opacity-100'}`}
+                      className={`flex flex-col items-center justify-center p-8 rounded-3xl border-2 transition-all duration-300 ${pptConfig.ratio === r.label ? (isDarkMode ? 'border-white bg-zinc-800 shadow-xl shadow-white/5' : 'border-black bg-white shadow-xl') : (isDarkMode ? 'border-zinc-800 bg-zinc-900/50 text-zinc-600' : 'border-gray-100 bg-[rgba(255,255,255,0.5)] text-gray-400 opacity-60 hover:opacity-100')}`}
                     >
                       <div className="mb-3">{r.icon}</div>
                       <span className="font-bold text-xl mb-1">{r.label}</span>
@@ -973,9 +973,9 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     <button
                       key={t.id}
                       onClick={() => setPptConfig(prev => ({ ...prev, theme: t.id }))}
-                      className={`flex items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-300 ${pptConfig.theme === t.id ? 'border-black bg-white shadow-lg' : 'border-gray-100 bg-[rgba(255,255,255,0.5)] text-gray-400'}`}
+                      className={`flex items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-300 ${pptConfig.theme === t.id ? (isDarkMode ? 'border-white bg-zinc-800 shadow-lg shadow-white/5' : 'border-black bg-white shadow-lg') : (isDarkMode ? 'border-zinc-800 bg-zinc-900/50 text-zinc-600' : 'border-gray-100 bg-[rgba(255,255,255,0.5)] text-gray-400')}`}
                     >
-                      <div className={`p-2 rounded-lg ${pptConfig.theme === t.id ? 'bg-black text-white' : 'bg-gray-100'}`}>
+                      <div className={`p-2 rounded-lg ${pptConfig.theme === t.id ? (isDarkMode ? 'bg-white text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-zinc-800' : 'bg-gray-100')}`}>
                         {t.icon}
                       </div>
                       <span className="font-bold">{t.label}</span>
@@ -990,16 +990,16 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   <Hash className="w-5 h-5 text-orange-500" />
                   <h3 className="font-semibold text-lg">Number of Slides</h3>
                 </div>
-                <div className="flex items-center gap-6 p-4 bg-white border border-gray-100 rounded-2xl">
+                <div className={`flex items-center gap-6 p-4 border rounded-2xl transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
                   <input
                     type="range"
                     min="1"
                     max="20"
                     value={pptConfig.slides}
                     onChange={(e) => setPptConfig(prev => ({ ...prev, slides: parseInt(e.target.value) }))}
-                    className="flex-1 accent-black h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                    className={`flex-1 h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-gray-100'}`}
                   />
-                  <span className="text-3xl font-display font-bold w-12 text-center">{pptConfig.slides}</span>
+                  <span className={`text-3xl font-display font-bold w-12 text-center ${isDarkMode ? 'text-white' : 'text-black'}`}>{pptConfig.slides}</span>
                 </div>
               </section>
 
@@ -1010,26 +1010,26 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 className="pt-12 border-t border-gray-200"
               >
                 <div className="text-center mb-8">
-                  <h3 className="text-2xl font-display font-medium mb-2">Ready to generate?</h3>
+                  <h3 className={`text-2xl font-display font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-black'}`}>Ready to generate?</h3>
                   <p className="text-gray-400">Our engine will help you create a professional presentation structure automatically.</p>
                 </div>
                 
                 <button
                   onClick={handleContentTypeSelect}
-                  className="w-full group p-8 rounded-3xl border-2 border-black bg-black text-white transition-all duration-300 flex items-center justify-between overflow-hidden hover:scale-[1.02] shadow-2xl shadow-black/10"
+                  className={`w-full group p-8 rounded-3xl border-2 transition-all duration-300 flex items-center justify-between overflow-hidden hover:scale-[1.02] shadow-2xl ${isDarkMode ? 'border-white bg-white text-black shadow-white/5' : 'border-black bg-black text-white shadow-black/10'}`}
                 >
                   <div className="flex items-center gap-6">
-                    <div className="p-4 bg-white/20 backdrop-blur-md rounded-2xl">
-                      <Wand2 className="w-8 h-8 text-white" />
+                    <div className={`p-4 backdrop-blur-md rounded-2xl ${isDarkMode ? 'bg-black/10' : 'bg-white/20'}`}>
+                      <Wand2 className={`w-8 h-8 ${isDarkMode ? 'text-black' : 'text-white'}`} />
                     </div>
                     <div className="text-left">
                       <h4 className="text-2xl font-bold mb-1">Create with AI</h4>
-                      <p className="text-sm text-gray-400 leading-relaxed max-w-sm">
+                      <p className={`text-sm leading-relaxed max-w-sm ${isDarkMode ? 'text-zinc-600' : 'text-gray-400'}`}>
                         Enter a topic and let Gemini generate structured content and themes for you.
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center justify-center w-12 h-12 bg-white/10 rounded-full group-hover:bg-white/20 transition-all">
+                  <div className={`flex items-center justify-center w-12 h-12 rounded-full transition-all ${isDarkMode ? 'bg-black/10 group-hover:bg-black/20' : 'bg-white/10 group-hover:bg-white/20'}`}>
                     <ArrowRight className="w-6 h-6" />
                   </div>
                 </button>
@@ -1046,7 +1046,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
           >
             <button
               onClick={() => setView("ppt-config")}
-              className="flex items-center gap-2 text-gray-400 hover:text-black transition-colors mb-12 group mx-auto"
+              className={`flex items-center gap-2 transition-colors mb-12 group mx-auto ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
             >
               <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
               <span className="font-medium">Back to config</span>
@@ -1056,7 +1056,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className="w-20 h-20 bg-blue-500 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-[rgba(59,130,246,0.3)]">
                 <Wand2 className="w-10 h-10" />
               </div>
-              <h2 className="text-4xl font-display font-medium text-black mb-4">What's the topic?</h2>
+              <h2 className={`text-4xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>What's the topic?</h2>
               <p className="text-gray-500 text-lg">Tell us what your presentation is about, and we will generate the prompts for Gemini.</p>
             </header>
 
@@ -1066,14 +1066,14 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   placeholder="e.g. The impact of blockchain on global supply chains..."
-                  className="w-full h-32 p-6 text-xl bg-white border border-gray-100 rounded-3xl focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-blue-200 transition-all resize-none shadow-sm"
+                  className={`w-full h-32 p-6 text-xl border rounded-3xl focus:outline-none focus:ring-4 transition-all resize-none shadow-sm ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:ring-white/5 focus:border-zinc-700' : 'bg-white border-gray-100 focus:ring-blue-50 focus:border-blue-200'}`}
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={!topic.trim()}
-                className="w-full bg-black text-white py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl shadow-[rgba(0,0,0,0.1)]"
+                className={`w-full py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
               >
                 Create Prompt <ArrowRight className="w-5 h-5" />
               </button>
@@ -1086,27 +1086,27 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             animate={{ opacity: 1, y: 0 }}
             className="max-w-4xl mx-auto px-6 py-12"
           >
-            <div className="bg-white border border-gray-100 rounded-[48px] overflow-hidden shadow-2xl flex flex-col md:flex-row h-full md:min-h-[600px]">
+            <div className={`border rounded-[48px] overflow-hidden shadow-2xl flex flex-col md:flex-row h-full md:min-h-[600px] ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
               {/* Prompt Area */}
-              <div className="w-full md:w-5/12 bg-[rgba(249,250,251,0.5)] p-10 border-b md:border-b-0 md:border-r border-gray-100">
+              <div className={`w-full md:w-5/12 p-10 border-b md:border-b-0 md:border-r transition-colors ${isDarkMode ? 'bg-zinc-950/50 border-zinc-800' : 'bg-[rgba(249,250,251,0.5)] border-gray-100'}`}>
                 <div className="flex items-center gap-2 mb-8">
-                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                  <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
                     <Terminal className="w-4 h-4" />
                   </div>
                   <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Step {view === "ppt-structure-entry" ? '01' : `02 - ${activeSubtopicIndex + 1}/5`}</span>
                 </div>
 
-                <h3 className="text-2xl font-display font-medium text-black mb-6">
+                <h3 className={`text-2xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>
                   {view === "ppt-structure-entry" ? 'Generate Structure' : `Defining ${subtopics[activeSubtopicIndex]}`}
                 </h3>
                 
-                <div className="bg-white border border-gray-100 rounded-2xl p-6 mb-8 relative group">
-                  <p className="text-gray-600 text-sm leading-relaxed italic pr-8">
+                <div className={`border rounded-2xl p-6 mb-8 relative group transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
+                  <p className={`text-sm leading-relaxed italic pr-8 ${isDarkMode ? 'text-zinc-400' : 'text-gray-600'}`}>
                     {currentPrompt}
                   </p>
                   <button 
                     onClick={() => copyToClipboard(currentPrompt)}
-                    className="absolute top-4 right-4 text-gray-300 hover:text-black transition-colors"
+                    className={`absolute top-4 right-4 transition-colors ${isDarkMode ? 'text-zinc-600 hover:text-white' : 'text-gray-300 hover:text-black'}`}
                   >
                     <Copy className="w-4 h-4" />
                   </button>
@@ -1130,10 +1130,9 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full font-bold">READY</span>
                   )}
                 </div>
-                
-                <div className="relative flex-1 mb-8">
+                                  <div className="relative flex-1 mb-8">
                   {isAILoading ? (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-[rgba(249,250,251,0.5)] rounded-3xl border-2 border-dashed border-gray-200">
+                    <div className={`absolute inset-0 flex flex-col items-center justify-center rounded-3xl border-2 border-dashed transition-all ${isDarkMode ? 'bg-zinc-950/50 border-zinc-700' : 'bg-[rgba(249,250,251,0.5)] border-gray-200'}`}>
                       <RefreshCw className="w-10 h-10 text-blue-500 animate-spin mb-4" />
                       <p className="text-gray-400 font-medium animate-pulse">Generating your content...</p>
                     </div>
@@ -1142,7 +1141,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                       value={aiPasteBuffer}
                       onChange={(e) => setAiPasteBuffer(e.target.value)}
                       placeholder={view === "ppt-structure-entry" ? "Results will appear here..." : "Sub-topic content will appear here..."}
-                      className="w-full h-full bg-white border-2 border-gray-100 rounded-3xl p-8 resize-none outline-none focus:border-black transition-all text-gray-700 font-light text-lg leading-relaxed shadow-inner"
+                      className={`w-full h-full border-2 rounded-3xl p-8 resize-none outline-none transition-all font-light text-lg leading-relaxed shadow-inner ${isDarkMode ? 'bg-zinc-900 border-zinc-800 focus:border-white/20 text-zinc-300' : 'bg-white border-gray-100 focus:border-black text-gray-700'}`}
                     />
                   )}
                 </div>
@@ -1150,7 +1149,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 {!aiPasteBuffer && !isAILoading ? (
                   <button
                     onClick={view === "ppt-structure-entry" ? automatedStructureGeneration : automatedSubtopicGeneration}
-                    className="w-full bg-blue-600 text-white py-6 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-200"
+                    className={`w-full py-6 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all shadow-xl ${isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/10' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200'}`}
                   >
                     <Sparkles className="w-5 h-5" /> Run AI for this Step
                   </button>
@@ -1158,12 +1157,13 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   <button
                     onClick={view === "ppt-structure-entry" ? handleStructureProcess : handleSubtopicProcess}
                     disabled={!aiPasteBuffer.trim() || isAILoading}
-                    className="w-full bg-black text-white py-6 rounded-2xl font-bold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl shadow-[rgba(0,0,0,0.1)] disabled:opacity-20"
+                    className={`w-full py-6 rounded-2xl font-bold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl disabled:opacity-20 ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-[rgba(0,0,0,0.1)]'}`}
                   >
                     {view === "ppt-structure-entry" ? "Confirm Structure" : (activeSubtopicIndex === subtopics.length - 1 ? "Review Final Content" : "Confirm & Next Sub-topic")}
                     <ArrowRight className="w-5 h-5" />
                   </button>
                 )}
+
               </div>
             </div>
           </motion.div>
@@ -1175,24 +1175,24 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             className="max-w-5xl mx-auto px-6 py-24"
           >
             <header className="text-center mb-20">
-              <div className="inline-flex items-center gap-2 px-6 py-2 bg-emerald-50 text-emerald-600 rounded-full text-xs font-bold uppercase tracking-widest mb-6">
+              <div className={`inline-flex items-center gap-2 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 ${isDarkMode ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
                 <CheckCircle2 className="w-4 h-4" /> Content Compilation Complete
               </div>
-              <h2 className="text-6xl font-display font-medium text-black mb-6">Review Final Content</h2>
+              <h2 className={`text-6xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>Review Final Content</h2>
               <p className="text-gray-400 text-xl font-light">Here is the summarized structure for your presentation.</p>
             </header>
 
             <div className="space-y-6 mb-20">
-              <div className="bg-white border border-gray-100 rounded-[40px] p-10 shadow-sm">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300 mb-8 pb-4 border-b border-gray-50">Main Topic: {topic}</h3>
+              <div className={`border rounded-[40px] p-10 shadow-sm transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
+                <h3 className={`text-xs font-bold uppercase tracking-widest mb-8 pb-4 border-b ${isDarkMode ? 'text-zinc-500 border-zinc-800' : 'text-gray-300 border-gray-50'}`}>Main Topic: {topic}</h3>
                 
                 <div className="space-y-12">
                   {slidesData.slice(0, subtopics.length).map((slide, idx) => (
                     <div key={idx} className="flex gap-10">
-                      <div className="text-5xl font-display font-bold text-gray-100 mt-[-8px]">0{idx + 1}</div>
+                      <div className={`text-5xl font-display font-bold mt-[-8px] ${isDarkMode ? 'text-zinc-800' : 'text-gray-100'}`}>0{idx + 1}</div>
                       <div>
-                        <h4 className="text-2xl font-display font-medium text-black mb-4">{slide.title}</h4>
-                        <div className="prose prose-sm text-gray-500 whitespace-pre-wrap leading-relaxed font-light">
+                        <h4 className={`text-2xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>{slide.title}</h4>
+                        <div className={`prose prose-sm whitespace-pre-wrap leading-relaxed font-light ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
                           {slide.text}
                         </div>
                       </div>
@@ -1205,14 +1205,14 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             <div className="flex flex-col items-center gap-8">
               <button
                 onClick={generateFinalPrompt}
-                className="bg-black text-white py-6 px-20 rounded-full font-bold text-xl shadow-2xl shadow-[rgba(0,0,0,0.2)] hover:scale-105 active:scale-95 transition-all"
+                className={`py-6 px-20 border rounded-full font-bold text-xl transition-all hover:scale-105 active:scale-95 shadow-2xl ${isDarkMode ? 'bg-white text-black border-white shadow-white/5' : 'bg-black text-white border-black shadow-black/20'}`}
               >
                 Create Presentation Prompt
               </button>
               
               <button 
                 onClick={handleReset}
-                className="text-gray-400 hover:text-black font-semibold transition-colors"
+                className={`font-semibold transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
               >
                 Discard and Start Over
               </button>
@@ -1226,38 +1226,38 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             className="max-w-4xl mx-auto px-6 py-24"
           >
             <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 px-6 py-2 bg-blue-50 text-blue-600 rounded-full text-xs font-bold uppercase tracking-widest mb-6">
+              <div className={`inline-flex items-center gap-2 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 ${isDarkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
                 🚀 Step 03: Final Deployment
               </div>
-              <h2 className="text-5xl font-display font-medium text-black mb-6">Your Website Prompt is Ready</h2>
+              <h2 className={`text-5xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>Your Website Prompt is Ready</h2>
               <p className="text-gray-400 text-xl font-light max-w-2xl mx-auto">
                 Copy this comprehensive prompt to Google AI Studio Build to generate your interactive website with PDF export functionality.
               </p>
             </div>
 
-            <div className="bg-white border border-gray-100 rounded-[48px] overflow-hidden shadow-2xl">
-              <div className="p-10 bg-[rgba(249,250,251,0.5)] border-b border-gray-100 flex items-center justify-between">
+            <div className={`border rounded-[48px] overflow-hidden shadow-2xl transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
+              <div className={`p-10 border-b flex items-center justify-between transition-colors ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-[rgba(249,250,251,0.5)] border-gray-100'}`}>
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-blue-500 text-white rounded-lg">
                     <Sparkles className="w-5 h-5" />
                   </div>
-                  <span className="font-bold text-sm uppercase tracking-widest text-gray-500">Google AI Studio Build Prompt</span>
+                  <span className={`font-bold text-sm uppercase tracking-widest ${isDarkMode ? 'text-zinc-500' : 'text-gray-500'}`}>Google AI Studio Build Prompt</span>
                 </div>
                 <button 
                   onClick={() => copyToClipboard(currentPrompt)}
-                  className="flex items-center gap-2 bg-white px-4 py-2 border border-gray-200 rounded-xl text-sm font-bold hover:bg-gray-50 transition-colors shadow-sm"
+                  className={`flex items-center gap-2 px-4 py-2 border rounded-xl text-sm font-bold transition-all shadow-sm ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700' : 'bg-white border-gray-200 text-black hover:bg-gray-50'}`}
                 >
                   <Copy className="w-4 h-4" /> Copy Prompt
                 </button>
               </div>
 
               <div className="p-10 max-h-[400px] overflow-y-auto">
-                <pre className="text-gray-600 font-mono text-sm leading-relaxed whitespace-pre-wrap">
+                <pre className={`font-mono text-sm leading-relaxed whitespace-pre-wrap transition-colors ${isDarkMode ? 'text-zinc-400' : 'text-gray-600'}`}>
                   {currentPrompt}
                 </pre>
               </div>
 
-              <div className="p-10 bg-black text-white flex flex-col md:flex-row items-center justify-between gap-8">
+              <div className={`p-10 flex flex-col md:flex-row items-center justify-between gap-8 transition-colors ${isDarkMode ? 'bg-zinc-950 text-white' : 'bg-black text-white'}`}>
                 <div className="flex-1">
                   <h4 className="text-xl font-bold mb-2">
                     {isAILoading ? (
@@ -1265,19 +1265,19 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                         <RefreshCw className="w-5 h-5 animate-spin" /> 
                         Building Website... ({generationTimer}s)
                       </span>
-                    ) : "Ready to Build?"}
+                    ) : (isDarkMode ? "Build with Gemini" : "Ready to Build?")}
                   </h4>
                   <p className="text-gray-400 text-sm">
                     {isAILoading 
                       ? "Gemini is now synthesizing your HTML, CSS, and interactive logic based on the refined prompts."
-                      : "Head over to Google AI Studio Build or run it here automatically."}
+                      : (isDarkMode ? "Initialize the automated deployment sequence or launch manually." : "Head over to Google AI Studio Build or run it here automatically.")}
                   </p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                   <button
                     onClick={automatedFinalGeneration}
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-3 bg-zinc-600 text-white py-4 px-8 rounded-2xl font-bold hover:bg-zinc-700 transition-all shadow-lg shadow-black/10"
+                    className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/10' : 'bg-zinc-600 text-white hover:bg-zinc-700 shadow-black/10'}`}
                   >
                     <Sparkles className="w-5 h-5" /> Run Automatically (Dev)
                   </button>
@@ -1286,7 +1286,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     href="https://aistudio.google.com/gemini/vibe-code"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 sm:flex-initial flex items-center justify-center gap-3 bg-[rgba(255,255,255,1)] text-black py-4 px-8 rounded-2xl font-bold hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[rgba(255,255,255,0.1)]"
+                    className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold hover:scale-105 active:scale-95 transition-all shadow-lg ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-white text-black shadow-black/10'}`}
                   >
                     Launch AI Studio Build <ExternalLink className="w-5 h-5" />
                   </a>
@@ -1297,7 +1297,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             <div className="mt-12 text-center">
               <button 
                 onClick={() => setView("ppt-summary-preview")}
-                className="text-gray-400 hover:text-black font-semibold transition-colors"
+                className={`font-semibold transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
               >
                 Back to Content Summary
               </button>
@@ -1309,27 +1309,27 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="min-h-screen bg-gray-50 py-12 px-4"
+            className={`min-h-screen py-12 px-4 transition-colors ${isDarkMode ? 'bg-zinc-950' : 'bg-gray-50'}`}
           >
             <div className="max-w-6xl mx-auto">
               <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12">
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => setView("dashboard")}
-                    className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 hover:text-black transition-all"
+                    className={`p-3 border rounded-2xl transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-white' : 'bg-white border-gray-100 text-gray-400 hover:text-black'}`}
                   >
                     <ChevronLeft className="w-6 h-6" />
                   </button>
                   <div>
-                    <h2 className="text-3xl font-display font-medium text-black">Website Preview</h2>
+                    <h2 className={`text-3xl font-display font-medium ${isDarkMode ? 'text-white' : 'text-black'}`}>Website Preview</h2>
                     <p className="text-gray-400">Review your presentation as a modern landing page.</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center justify-center gap-4">
                   <button
                     onClick={() => setIsLiked(!isLiked)}
-                    className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all ${isLiked ? 'bg-pink-500 text-white shadow-lg shadow-pink-200' : 'bg-white text-gray-400 border border-gray-100 hover:border-pink-200 hover:text-pink-500'}`}
+                    className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all ${isLiked ? 'bg-pink-500 text-white shadow-lg shadow-pink-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:text-pink-400 hover:border-pink-500/30' : 'bg-white text-gray-400 border border-gray-100 hover:border-pink-200 hover:text-pink-500')}`}
                   >
                     <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
                     {isLiked ? "Liked!" : "Like Logic"}
@@ -1337,7 +1337,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
 
                   <button
                     onClick={exportToPDF}
-                    className="flex items-center gap-2 bg-black text-white py-4 px-8 rounded-2xl font-bold shadow-xl shadow-[rgba(0,0,0,0.1)] hover:scale-105 active:scale-95 transition-all"
+                    className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                   >
                     <Download className="w-5 h-5" />
                     Download PDF
@@ -1345,7 +1345,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
 
                   <button
                     onClick={downloadNotes}
-                    className="flex items-center gap-2 bg-white text-blue-600 border border-blue-100 py-4 px-8 rounded-2xl font-bold hover:bg-blue-50 transition-all"
+                    className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400 hover:bg-zinc-700' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}
                   >
                     <FileText className="w-5 h-5" />
                     Read Notes
@@ -1353,7 +1353,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
 
                   <button
                     onClick={handleFinalizePPTX}
-                    className="flex items-center gap-2 bg-white text-gray-400 border border-gray-100 py-4 px-8 rounded-2xl font-bold hover:border-gray-200 hover:text-black transition-all"
+                    className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-200 hover:text-black'}`}
                   >
                     <FileOutput className="w-5 h-5" />
                     PPTX
@@ -1365,10 +1365,10 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 {slidesData.slice(0, pptConfig.slides).map((slide, index) => (
                   <div
                     key={index}
-                    className="slide-render-target relative bg-white border border-gray-100 rounded-[48px] overflow-hidden shadow-sm aspect-video md:aspect-[21/9] lg:aspect-[2.4/1]"
+                    className={`slide-render-target relative border rounded-[48px] overflow-hidden shadow-sm aspect-video md:aspect-[21/9] lg:aspect-[2.4/1] transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}
                     style={{ 
-                      backgroundColor: pptConfig.theme === 'dark' ? '#1a1a1a' : '#ffffff',
-                      color: pptConfig.textColor
+                      backgroundColor: pptConfig.theme === 'dark' ? '#1a1a1a' : (pptConfig.theme === 'light' ? '#ffffff' : undefined),
+                      color: pptConfig.theme === 'dark' ? '#ffffff' : '#000000'
                     }}
                   >
                     <div className="absolute inset-0 flex flex-col md:flex-row">
@@ -1420,10 +1420,10 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className="absolute inset-0 bg-[rgba(59,130,246,0.2)] blur-[60px] animate-pulse" />
             </div>
 
-            <h2 className="text-5xl font-display font-medium text-gray-900 mb-6">
+            <h2 className={`text-5xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
               {isGenerating ? "Synthesizing..." : "Presentation Ready!"}
             </h2>
-            <p className="text-gray-500 text-xl font-light mb-12 max-w-md mx-auto">
+            <p className={`text-xl font-light mb-12 max-w-md mx-auto ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
               {isGenerating 
                 ? "Our AI engine is compiling your content, optimizing layouts, and generating a high-fidelity PDF document."
                 : "Your PDF presentation has been generated and the download should start automatically."}
@@ -1434,7 +1434,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 <div className="flex flex-col gap-4 w-full">
                   <button
                     onClick={exportToPDF}
-                    className="bg-black text-white py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:scale-[1.02] transition-all shadow-xl shadow-[rgba(0,0,0,0.1)]"
+                    className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                   >
                     <Download className="w-5 h-5" /> Download PDF Again
                   </button>
@@ -1446,7 +1446,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   </button>
                   <button
                     onClick={handleFinalizePPTX}
-                    className="bg-gray-100 text-black py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-gray-200 transition-all"
+                    className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all ${isDarkMode ? 'bg-zinc-800 border border-zinc-700 text-white hover:bg-zinc-700' : 'bg-gray-100 text-black hover:bg-gray-200'}`}
                   >
                     <FileOutput className="w-5 h-5" /> Export as PPTX instead
                   </button>
@@ -1454,7 +1454,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               )}
               <button
                 onClick={handleReset}
-                className="text-gray-400 hover:text-black font-semibold py-4"
+                className={`font-semibold py-4 transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
               >
                 Create another presentation
               </button>
