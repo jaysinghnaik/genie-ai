@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useRef, useEffect, ChangeEvent, FormEvent } from "react";
+import { useState, useRef, useEffect, ChangeEvent, FormEvent, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import pptxgen from "pptxgenjs";
 import html2canvas from "html2canvas";
@@ -14,7 +14,8 @@ import {
   Layout, Palette, Moon, Sun, Hash, Wand2, Image as ImageIcon, 
   Video, Play, Pause, ChevronRight, CheckCircle2, Download, RefreshCw,
   Loader2, Eye, EyeOff, FileOutput, Heart, Copy, ExternalLink, Terminal,
-  Settings as SettingsIcon, Info, UserCircle, X, Battery, Key, ShieldCheck, Check, Lock, LogOut
+  Settings as SettingsIcon, Info, UserCircle, X, Battery, Key, ShieldCheck, Check, Lock, LogOut,
+  Maximize2, Minimize2
 } from "lucide-react";
 
 // Firebase Imports
@@ -90,8 +91,18 @@ const apps = [
   }
 ];
 
+interface ConsoleLog {
+  type: 'log' | 'error' | 'warn';
+  message: string;
+  timestamp: number;
+}
+
 export default function App() {
   const [generatedCode, setGeneratedCode] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
+  const [iterativePrompt, setIterativePrompt] = useState("");
+  const [isIterating, setIsIterating] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -128,20 +139,6 @@ export default function App() {
   const [showApiKey, setShowApiKey] = useState(false);
   
   const previewRef = useRef<HTMLDivElement>(null);
-
-  // Test Connection
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
 
   // Listen for Auth State
   useEffect(() => {
@@ -229,7 +226,7 @@ export default function App() {
     e.preventDefault();
     if (!topic.trim()) return;
     
-    const prompt = `I want to create a professional presentation about: "${topic}". Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Just the titles.`;
+    const prompt = `I want to create a professional presentation about: "${topic}". Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Output ONLY the titles. Absolutely no introductory or concluding text. Just the titles.`;
     setCurrentPrompt(prompt);
     setView("ppt-structure-entry");
   };
@@ -304,8 +301,10 @@ export default function App() {
         contents: currentPrompt
       });
       const code = result.text || "";
-      // Strip markdown code blocks if any
-      const strippedCode = code.replace(/```html|```xml|```/g, "").trim();
+      // Match content inside markdown code blocks (```html ... ```)
+      const codeMatch = code.match(/```(?:html|xml)?\s*([\s\S]*?)```/i);
+      const strippedCode = codeMatch ? codeMatch[1].trim() : code.replace(/```html|```xml|```/g, "").trim();
+      
       setGeneratedCode(strippedCode);
       // Switch view after generation
       // setView("ppt-preview"); 
@@ -319,6 +318,78 @@ export default function App() {
       setIsAILoading(false);
     }
   };
+
+  const handleIterativeGeneration = async () => {
+    if (!iterativePrompt.trim()) return;
+    
+    const aiInstance = getAiInstance();
+    if (!aiInstance) return;
+
+    setIsIterating(true);
+    try {
+      const prompt = `Currently, the website code is as follows:\n\n${generatedCode}\n\nUser request for changes: "${iterativePrompt}"\n\nPlease output the updated FULL code for the website including the changes. Output ONLY the code block.`;
+      
+      const result = await aiInstance.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt
+      });
+      
+      const code = result.text || "";
+      const codeMatch = code.match(/```(?:html|xml)?\s*([\s\S]*?)```/i);
+      const strippedCode = codeMatch ? codeMatch[1].trim() : code.replace(/```html|```xml|```/g, "").trim();
+      
+      setGeneratedCode(strippedCode);
+      setIterativePrompt("");
+    } catch (error) {
+      console.error("Iteration failed:", error);
+    } finally {
+      setIsIterating(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'iframe-log') {
+        setConsoleLogs(prev => [...prev, {
+          type: event.data.level,
+          message: event.data.message,
+          timestamp: Date.now()
+        }].slice(-50)); // Keep last 50
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const injectedCode = useMemo(() => {
+    if (!generatedCode) return "";
+    const logScript = `
+      <script>
+        (function() {
+          const originalLog = console.log;
+          const originalError = console.error;
+          const originalWarn = console.warn;
+          
+          const send = (level, args) => {
+            window.parent.postMessage({
+              type: 'iframe-log',
+              level,
+              message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')
+            }, '*');
+          };
+
+          console.log = (...args) => { originalLog(...args); send('log', args); };
+          console.error = (...args) => { originalError(...args); send('error', args); };
+          console.warn = (...args) => { originalWarn(...args); send('warn', args); };
+
+          window.onerror = (msg, url, line) => {
+            send('error', [\`Uncaught Error: \${msg} at \${line}\`]);
+          };
+        })();
+      </script>
+    `;
+    return generatedCode.replace('<head>', '<head>' + logScript);
+  }, [generatedCode]);
 
   useEffect(() => {
     let interval: any;
@@ -337,7 +408,7 @@ export default function App() {
     
     const extracted = aiPasteBuffer.split('\n')
       .map(line => line.replace(/^\d+\.\s*|-\s*/, '').trim())
-      .filter(line => line.length > 0)
+      .filter(line => line.length > 0 && !line.endsWith(':') && line.length < 100)
       .slice(0, pptConfig.slides);
     
     if (extracted.length === 0) return;
@@ -428,50 +499,48 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
         format: pptConfig.ratio === "9:16" ? [1080, 1920] : [1920, 1080]
       });
 
-      const slides = previewRef.current.querySelectorAll('.slide-render-target');
+      let slides: HTMLElement[] = [];
+      const iframe = previewRef.current.querySelector('iframe');
+      
+      if (iframe && iframe.contentDocument) {
+        slides = Array.from(iframe.contentDocument.querySelectorAll('.slide-render-target')) as HTMLElement[];
+      }
+      
+      if (slides.length === 0) {
+        slides = Array.from(previewRef.current.querySelectorAll('.slide-render-target')) as HTMLElement[];
+      }
+
+      if (slides.length === 0) {
+        const target = iframe || previewRef.current;
+        slides = [target as HTMLElement];
+      }
       
       for (let i = 0; i < slides.length; i++) {
-        const slide = slides[i] as HTMLElement;
+        const slide = slides[i];
         const canvas = await html2canvas(slide, {
           scale: 2,
           useCORS: true,
           logging: false,
-          backgroundColor: null,
+          backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
           width: pptConfig.ratio === "16:9" ? 1920 : 1080,
           height: pptConfig.ratio === "16:9" ? 1080 : 1920,
           onclone: (clonedDoc) => {
-            // Tier 2: Aggressive "onclone" Sanitization
-            const clonedElement = clonedDoc.querySelector('.slide-render-target') as HTMLElement;
-            if (clonedElement) {
-              // Forced Visibility Hook: Fix for "missing content" due to animations
-              const allElements = clonedDoc.querySelectorAll('*');
-              allElements.forEach((el) => {
-                const element = el as HTMLElement;
-                // Instant forced visibility
-                element.style.opacity = '1';
-                element.style.visibility = 'visible';
-                element.style.transform = 'none';
-                element.style.animation = 'none';
-                element.style.transition = 'none';
-                
-                const style = window.getComputedStyle(element);
-                
-                // Force computed styles into HEX inline styles for compatibility
-                if (style.backgroundColor && style.backgroundColor.includes('oklch')) {
-                   element.style.backgroundColor = style.backgroundColor.replace(/oklch\([^)]+\)/g, '#3b82f6');
-                }
-                if (style.color && style.color.includes('oklch')) {
-                   element.style.color = style.color.replace(/oklch\([^)]+\)/g, '#000000');
-                }
-                
-                element.style.cssText = element.style.cssText.replace(/oklch\([^)]+\)/g, '#000000');
-              });
-            }
-
-            // Global Style Tag Filtering
-            const styleTags = clonedDoc.querySelectorAll('style');
-            styleTags.forEach(tag => {
-              tag.innerHTML = tag.innerHTML.replace(/oklch\([^)]+\)/g, '#3b82f6');
+            const allElements = clonedDoc.querySelectorAll('*');
+            allElements.forEach((el) => {
+              const element = el as HTMLElement;
+              element.style.opacity = '1';
+              element.style.visibility = 'visible';
+              element.style.transform = 'none';
+              element.style.animation = 'none';
+              element.style.transition = 'none';
+              
+              const style = window.getComputedStyle(element);
+              if (style.backgroundColor && style.backgroundColor.includes('oklch')) {
+                 element.style.backgroundColor = '#3b82f6';
+              }
+              if (style.color && style.color.includes('oklch')) {
+                 element.style.color = '#000000';
+              }
             });
           }
         });
@@ -483,6 +552,10 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
         const pdfHeight = pdf.internal.pageSize.getHeight();
         
         pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+        // Memory optimization: help garbage collector
+        canvas.width = 0;
+        canvas.height = 0;
       }
 
       pdf.save(`Genie_AI_Presentation_${Date.now()}.pdf`);
@@ -1322,18 +1395,33 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     <button
                       onClick={automatedWebsiteGeneration}
                       disabled={isAILoading}
-                      className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/10' : 'bg-zinc-600 text-white hover:bg-zinc-700 shadow-black/10'} ${isAILoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      style={{ backgroundColor: 'oklch(0.546 0.245 262.881)' }}
+                      className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg text-white hover:opacity-90 shadow-blue-500/10 ${isAILoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       <Sparkles className={`w-5 h-5 ${isAILoading ? 'animate-spin' : ''}`} /> 
-                      {isAILoading ? "Building..." : "Run Automatically (Dev)"}
+                      <span className="flex items-center gap-2">
+                        {isAILoading ? "Building..." : "Run Automatically"}
+                        {!isAILoading && (
+                          <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-md uppercase tracking-wider">beta</span>
+                        )}
+                      </span>
                     </button>
                   ) : (
-                    <button
-                      onClick={() => setView("ppt-preview")}
-                      className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/10' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-black/10'}`}
-                    >
-                      <Eye className="w-5 h-5" /> View Synthesis
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setView("ppt-preview")}
+                        className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/10' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-black/10'}`}
+                      >
+                        <Eye className="w-5 h-5" /> View Synthesis
+                      </button>
+                      <button
+                        onClick={() => setGeneratedCode("")}
+                        className={`flex items-center justify-center p-4 rounded-2xl font-bold transition-all border ${isDarkMode ? 'border-zinc-700 text-zinc-400 hover:bg-zinc-800' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        title="Dismiss Synthesis & Reset"
+                      >
+                        <RefreshCw className="w-5 h-5" />
+                      </button>
+                    </div>
                   )}
                   
                   <a 
@@ -1415,16 +1503,93 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 </div>
               </header>
 
-              <div ref={previewRef} className="space-y-12 h-full">
+              <div ref={previewRef} className="space-y-12 h-full flex flex-col lg:flex-row gap-6">
                 {generatedCode ? (
-                  <div className="w-full h-[80vh] rounded-[32px] overflow-hidden border border-gray-200 dark:border-zinc-800 bg-white">
+                  <>
+                  <div className={`relative flex-1 rounded-[32px] overflow-hidden border border-gray-200 dark:border-zinc-800 bg-white transition-all duration-500 ${isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'h-[80vh]'}`}>
+                    {isFullscreen && (
+                      <button 
+                        onClick={() => setIsFullscreen(false)}
+                        className="absolute top-6 right-6 z-10 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full backdrop-blur-md transition-all border border-white/20"
+                      >
+                        <Minimize2 className="w-6 h-6" />
+                      </button>
+                    )}
+                    {!isFullscreen && (
+                      <button 
+                        onClick={() => setIsFullscreen(true)}
+                        className="absolute top-6 right-6 z-10 bg-blue-600/90 hover:bg-blue-600 text-white p-3 rounded-2xl shadow-xl transition-all border border-blue-400/20"
+                      >
+                        <Maximize2 className="w-5 h-5" />
+                      </button>
+                    )}
                     <iframe
                       title="AI Synthesis Preview"
-                      srcDoc={generatedCode}
+                      srcDoc={injectedCode}
                       className="w-full h-full border-none"
                       sandbox="allow-scripts allow-modals allow-downloads allow-forms"
                     />
                   </div>
+
+                  <div className={`w-full lg:w-96 flex flex-col gap-4 ${isFullscreen ? 'hidden' : ''}`}>
+                    {/* Console Box */}
+                    <div className={`flex-1 rounded-[24px] border transition-all overflow-hidden flex flex-col ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-50 border-gray-100'}`}>
+                      <div className="px-5 py-3 border-b border-inherit flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                          <Terminal className="w-4 h-4 text-blue-500" /> Console
+                        </span>
+                        <button onClick={() => setConsoleLogs([])} className="text-[10px] text-gray-500 hover:text-gray-900 dark:hover:text-white transition-colors">Clear</button>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-4 font-mono text-[10px] space-y-2">
+                        {consoleLogs.some(l => l.type === 'error') && (
+                          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 flex flex-col gap-2">
+                            <div className="font-bold flex items-center gap-2">
+                              <Info className="w-3 h-3" /> Error Detected
+                            </div>
+                            <p className="opacity-80">The preview encountered an error. You can ask the AI to fix it below.</p>
+                            <button 
+                              onClick={() => setIterativePrompt(`The console reported the following errors:\n${consoleLogs.filter(l => l.type === 'error').map(l => l.message).join('\n')}\n\nPlease fix these errors in the code.`)}
+                              className="text-[10px] bg-red-500 text-white py-1.5 px-3 rounded-md font-bold hover:bg-red-600 transition-all self-start"
+                            >
+                              Auto-fill Fix Prompt
+                            </button>
+                          </div>
+                        )}
+                        {consoleLogs.length === 0 ? (
+                          <div className="text-gray-400 italic">No logs captured...</div>
+                        ) : (
+                          consoleLogs.map((log, i) => (
+                            <div key={i} className={`flex gap-2 ${log.type === 'error' ? 'text-red-500' : log.type === 'warn' ? 'text-yellow-600' : 'text-gray-600 dark:text-gray-400'}`}>
+                              <span className="shrink-0 opacity-50">[{new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+                              <span className="break-all">{log.message}</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Chat Iteration Box */}
+                    <div className={`rounded-[24px] border p-4 flex flex-col gap-3 ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100 shadow-sm'}`}>
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-blue-500">
+                        <Wand2 className="w-4 h-4" /> Modify with AI
+                      </div>
+                      <textarea
+                        value={iterativePrompt}
+                        onChange={(e) => setIterativePrompt(e.target.value)}
+                        placeholder="e.g. Change the button color to red or fix the alignment..."
+                        className={`w-full h-24 p-3 text-sm rounded-xl border resize-none focus:ring-2 focus:ring-blue-500 outline-none transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-200'}`}
+                      />
+                      <button
+                        onClick={handleIterativeGeneration}
+                        disabled={isIterating || !iterativePrompt.trim()}
+                        className={`w-full py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isIterating ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'}`}
+                      >
+                        {isIterating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {isIterating ? 'Applying Changes...' : 'Update Website'}
+                      </button>
+                    </div>
+                  </div>
+                  </>
                 ) : slidesData.slice(0, pptConfig.slides).map((slide, index) => (
                   <div
                     key={index}
