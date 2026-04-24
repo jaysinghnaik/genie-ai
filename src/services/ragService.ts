@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 
 export interface Chunk {
@@ -14,7 +13,6 @@ export interface SlideData {
 export interface VerificationResult {
   score: number;
   issues: string[];
-  suggestions: string[];
 }
 
 export class RAGService {
@@ -25,20 +23,21 @@ export class RAGService {
   }
 
   /**
-   * 1. Deterministic Chunking
+   * 1. Chunking (still LLM-based but improved prompt)
    */
   async chunkDocument(document: string): Promise<Chunk[]> {
     const prompt = `
-Split the document into chunks using structure, not interpretation.
+Split the document strictly using structural rules.
 
 Rules:
-- Split by headings if present
+- Split by headings (#, ##, etc.) if present
 - Otherwise split by paragraphs
-- Each chunk must be 100–300 words
+- Each chunk must be 100–250 words
+- Do NOT interpret or modify text
 - Do NOT merge unrelated sections
-- Preserve original wording exactly
+- Preserve exact original wording
 
-Return output ONLY as a JSON array. Do not include talk, reasoning, or preamble.
+Return ONLY valid JSON:
 [
   { "id": "chunk_1", "text": "..." }
 ]
@@ -46,27 +45,25 @@ Return output ONLY as a JSON array. Do not include talk, reasoning, or preamble.
 Document:
 ${document}
 `;
-    const result = await this.ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return this.parseJSON(result.text);
+    const result = await this.generate(prompt);
+    return this.parseJSON(result);
   }
 
   /**
-   * 2. Pre-filter Retrieval (reduce AI load)
+   * 2. Faster Retrieval (single efficient call)
    */
-  private async preFilterRetrieval(chunks: Chunk[], query: string): Promise<Chunk[]> {
+  async retrieveRelevantChunks(chunks: Chunk[], query: string): Promise<Chunk[]> {
     const prompt = `
-From the given chunks, first filter only those that contain keywords or closely related terms to the topic "${query}".
+Select the most relevant chunks for the topic "${query}".
 
 Rules:
-- Keep only chunks that directly mention or strongly relate to the topic
-- Remove unrelated or weakly related chunks
-- Do not exceed 8 chunks
-- Preserve original text exactly
+- Prioritize chunks with direct keyword or semantic relevance
+- Select only top 3–4 chunks (strict limit)
+- Avoid repetition
+- Prefer chunks with clear, factual content
+- Ignore vague or generic text
 
-Return output ONLY as a JSON array.
+Return ONLY valid JSON:
 [
   { "id": "...", "text": "..." }
 ]
@@ -74,83 +71,46 @@ Return output ONLY as a JSON array.
 Chunks:
 ${JSON.stringify(chunks, null, 2)}
 `;
-    const result = await this.ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return this.parseJSON(result.text);
+    const result = await this.generate(prompt);
+    return this.parseJSON(result);
   }
 
   /**
-   * 2.1 Refined Hybrid Retrieval (after pre-filter)
+   * 3. Token Reduction (important optimization)
    */
-  async retrieveRelevantChunks(chunks: Chunk[], query: string): Promise<Chunk[]> {
-    const filteredChunks = await this.preFilterRetrieval(chunks, query);
-    
+  async reduceTokens(relevantChunks: Chunk[]): Promise<string> {
     const prompt = `
-From the filtered chunks, select the most useful ones for creating a presentation slide on "${query}".
+Reduce the following chunks while preserving meaning.
 
 Rules:
-- Select top 3–5 chunks
-- Prioritize clarity, completeness, and relevance
-- Avoid repetition
-- Ignore vague content
+- Remove redundant sentences
+- Keep key facts only
+- Do NOT lose important details
+- Keep it concise
 
-Return output ONLY as a JSON array.
-[
-  { "id": "...", "text": "..." }
-]
-
-Filtered Chunks:
-${JSON.stringify(filteredChunks, null, 2)}
-`;
-    const result = await this.ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return this.parseJSON(result.text);
-  }
-
-  /**
-   * 2.2 Consistent Context Generation
-   */
-  async generateContextString(relevantChunks: Chunk[]): Promise<string> {
-    const prompt = `
-Combine the selected chunks into a clean context for slide generation.
-
-Rules:
-- Do not summarize aggressively
-- Keep key details
-- Remove redundancy
-- Maintain factual accuracy
-
-Return as plain text.
+Return plain text.
 
 Chunks:
 ${relevantChunks.map(c => c.text).join("\n\n---\n\n")}
 `;
-    const result = await this.ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return result.text.trim();
+    return await this.generate(prompt);
   }
 
   /**
-   * 3. Improved Slide Generation (stable output)
+   * 4. Direct Slide Generation (skip extra processing)
    */
   async generateSlide(subtopic: string, context: string): Promise<SlideData> {
     const prompt = `
 Create a presentation slide for "${subtopic}" using ONLY the provided context.
 
 Rules:
-- 4–6 bullet points only
-- Each point must be supported by context
-- Keep language simple and clear
+- Extract directly from chunks (no separate summarization step)
+- 4–5 bullet points only
+- Each point must clearly map to chunk content
 - No external knowledge
-- Avoid repetition
+- Keep language short and precise
 
-Return output ONLY as a JSON object.
+Return ONLY valid JSON:
 {
   "title": "...",
   "points": ["...", "..."]
@@ -159,109 +119,112 @@ Return output ONLY as a JSON object.
 Context:
 ${context}
 `;
-    const result = await this.ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return this.parseJSON(result.text);
+    const result = await this.generate(prompt);
+    return this.parseJSON(result);
   }
 
   /**
-   * 4. Stronger Verification (replace old logic)
+   * 5. Ultra-light Verification (faster)
    */
-  async verifySlideDetailed(slide: SlideData, context: string): Promise<VerificationResult> {
+  async verifySlideDetailed(
+    slide: SlideData,
+    context: string
+  ): Promise<VerificationResult> {
     const prompt = `
-Evaluate the slide using the provided context.
+Evaluate the slide based on provided chunks.
 
 Rules:
-- Check if each point is supported by context
-- Identify unsupported or hallucinated content
-- Score from 1 to 10 based on grounding and clarity
+- Check if each point is supported
+- Be strict but concise
+- Give a score (1–10)
+- List only critical issues (max 3)
 
-Return output ONLY as a JSON object.
+Return ONLY valid JSON:
 {
   "score": 0-10,
-  "issues": ["..."],
-  "suggestions": ["..."]
+  "issues": ["..."]
 }
 
-Context:
+Chunks:
 ${context}
 
 Slide:
 ${JSON.stringify(slide, null, 2)}
 `;
-    const result = await this.ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: prompt,
-    });
-    return this.parseJSON(result.text);
+    const result = await this.generate(prompt);
+    return this.parseJSON(result);
   }
 
   /**
-   * 5. Simplified Regeneration Condition Prompt
+   * 6. Fast Regeneration (only when needed)
    */
-  async regenerateSlideSmart(subtopic: string, context: string, issues: string[], suggestions: string[]): Promise<SlideData> {
+  async regenerateSlideSmart(
+    subtopic: string,
+    context: string,
+    issues: string[]
+  ): Promise<SlideData> {
     const prompt = `
-Improve the slide based on the issues and suggestions.
+Fix the slide using the issues.
 
 Rules:
-- Fix only the problematic parts
-- Use ONLY the provided context
-- Keep 4–6 bullet points
-- Maintain clarity and accuracy
+- Only fix incorrect points
+- Keep correct points unchanged
+- Use ONLY given chunks
+- Maintain 4–5 bullet points
 
-Return output ONLY as a JSON object.
+Return ONLY valid JSON:
 {
   "title": "...",
   "points": ["...", "..."]
 }
 
-Context:
+Chunks:
 ${context}
 
 Issues:
 ${JSON.stringify(issues)}
-
-Suggestions:
-${JSON.stringify(suggestions)}
 `;
-    const result = await this.ai.models.generateContent({
+    const result = await this.generate(prompt);
+    return this.parseJSON(result);
+  }
+
+  /**
+   * Helper: unified LLM call
+   */
+  private async generate(prompt: string): Promise<string> {
+    const res = await this.ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
     });
-    return this.parseJSON(result.text);
+    return res.text;
   }
 
+  /**
+   * Robust JSON parser
+   */
   private parseJSON(text: string): any {
     try {
-      // Try to extract JSON from code blocks first
       const codeBlockMatch = text.match(/```json\n?([\s\S]*?)\n?```/);
       if (codeBlockMatch) {
         return JSON.parse(codeBlockMatch[1]);
       }
 
-      // If no code block, look for array or object structures more precisely
-      // We look for the first [ or { and the corresponding last patch
-      const arrayStart = text.indexOf('[');
-      const arrayEnd = text.lastIndexOf(']');
-      const objectStart = text.indexOf('{');
-      const objectEnd = text.lastIndexOf('}');
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      const firstBracket = text.indexOf("[");
+      const lastBracket = text.lastIndexOf("]");
 
-      if (arrayStart !== -1 && (objectStart === -1 || arrayStart < objectStart)) {
-        if (arrayEnd !== -1 && arrayEnd > arrayStart) {
-          return JSON.parse(text.substring(arrayStart, arrayEnd + 1));
-        }
-      } else if (objectStart !== -1) {
-        if (objectEnd !== -1 && objectEnd > objectStart) {
-          return JSON.parse(text.substring(objectStart, objectEnd + 1));
-        }
+      if (firstBracket !== -1 && lastBracket !== -1) {
+        return JSON.parse(text.substring(firstBracket, lastBracket + 1));
       }
 
-      // Last ditch effort: direct parse
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        return JSON.parse(text.substring(firstBrace, lastBrace + 1));
+      }
+
       return JSON.parse(text.trim());
     } catch (e) {
-      console.error("Failed to parse JSON from AI response:", text, e);
+      console.error("JSON parse failed:", text);
       return [];
     }
   }

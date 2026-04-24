@@ -455,16 +455,16 @@ export default function App() {
         // RAG Pipeline
         const subtopic = subtopics[activeSubtopicIndex];
         const relevantChunks = await ragService.retrieveRelevantChunks(chunks, subtopic);
-        const contextString = await ragService.generateContextString(relevantChunks);
+        const contextString = await ragService.reduceTokens(relevantChunks);
         
         let slideData = await ragService.generateSlide(subtopic, contextString);
         const verification = await ragService.verifySlideDetailed(slideData, contextString);
         
         if (verification.score < 7) {
-          slideData = await ragService.regenerateSlideSmart(subtopic, contextString, verification.issues, verification.suggestions);
+          slideData = await ragService.regenerateSlideSmart(subtopic, contextString, verification.issues);
         }
         
-        finalContent = `${slideData.title}\n\n${slideData.points.map(p => `• ${p}`).join("\n")}`;
+        finalContent = `${slideData.title}\n\n${slideData.points.map((p: any) => `• ${typeof p === 'string' ? p : p.text}`).join("\n")}`;
       } else {
         // Legacy flow
         const parts = [
