@@ -91,6 +91,7 @@ const apps = [
 ];
 
 export default function App() {
+  const [generatedCode, setGeneratedCode] = useState("");
   const [view, setView] = useState<View>("dashboard");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -287,8 +288,36 @@ export default function App() {
     }
   };
 
-  const automatedFinalGeneration = async () => {
-    alert("Currently not giving result upto expectation. It's under development. Use 'Launch AI Studio Build' and paste the proper prompt.");
+  const automatedWebsiteGeneration = async () => {
+    const aiInstance = getAiInstance();
+    if (!aiInstance) {
+      setApiError({ message: "GENIE AI API Key is missing. Please provide it in settings to continue.", type: 'missing' });
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    setIsAILoading(true);
+    setGenerationTimer(0);
+    try {
+      const result = await aiInstance.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: currentPrompt
+      });
+      const code = result.text || "";
+      // Strip markdown code blocks if any
+      const strippedCode = code.replace(/```html|```xml|```/g, "").trim();
+      setGeneratedCode(strippedCode);
+      // Switch view after generation
+      // setView("ppt-preview"); 
+    } catch (error: any) {
+      console.error("Website Synthesis failed:", error);
+      if (error?.message?.includes("API_KEY_INVALID") || error?.status === 403) {
+        setApiError({ message: "The API Key provided is invalid. Please check your key in settings.", type: 'invalid' });
+        setIsSettingsOpen(true);
+      }
+    } finally {
+      setIsAILoading(false);
+    }
   };
 
   useEffect(() => {
@@ -370,7 +399,7 @@ Website Requirements:
    - ENFORCE EXPLICIT HEX COLORS for all theme levels (Slate, Blue, Emerald).
    - REMOVE ALL Tailwind opacity modifiers (e.g., bg-white/10). Replace with explicit rgba() values like bg-[rgba(255,255,255,0.1)].
    - Use standard RGBA for shadows and glass effects.
-2. Structure: One section per slide with clear headings and readable content.
+2. Structure: One section per slide with clear headings and readable content. EACH section MUST have the class 'slide-render-target'.
 3. Feature: Add a prominent "Download as PDF" button.
 4. Functionality: CRITICAL - Use html2canvas and jsPDF to capture the website sections as slides.
    - For PDF: Use a fixed ${pptConfig.ratio === '16:9' ? '1920x1080' : '1080x1920'} pixel format (Aspect Ratio: ${pptConfig.ratio}).
@@ -1289,12 +1318,23 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-                  <button
-                    onClick={automatedFinalGeneration}
-                    className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/10' : 'bg-zinc-600 text-white hover:bg-zinc-700 shadow-black/10'}`}
-                  >
-                    <Sparkles className="w-5 h-5" /> Run Automatically (Dev)
-                  </button>
+                  {!generatedCode ? (
+                    <button
+                      onClick={automatedWebsiteGeneration}
+                      disabled={isAILoading}
+                      className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/10' : 'bg-zinc-600 text-white hover:bg-zinc-700 shadow-black/10'} ${isAILoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <Sparkles className={`w-5 h-5 ${isAILoading ? 'animate-spin' : ''}`} /> 
+                      {isAILoading ? "Building..." : "Run Automatically (Dev)"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setView("ppt-preview")}
+                      className={`flex-1 sm:flex-initial flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-bold transition-all shadow-lg ${isDarkMode ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-500/10' : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-black/10'}`}
+                    >
+                      <Eye className="w-5 h-5" /> View Synthesis
+                    </button>
+                  )}
                   
                   <a 
                     href="https://aistudio.google.com/build"
@@ -1375,8 +1415,17 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 </div>
               </header>
 
-              <div ref={previewRef} className="space-y-12">
-                {slidesData.slice(0, pptConfig.slides).map((slide, index) => (
+              <div ref={previewRef} className="space-y-12 h-full">
+                {generatedCode ? (
+                  <div className="w-full h-[80vh] rounded-[32px] overflow-hidden border border-gray-200 dark:border-zinc-800 bg-white">
+                    <iframe
+                      title="AI Synthesis Preview"
+                      srcDoc={generatedCode}
+                      className="w-full h-full border-none"
+                      sandbox="allow-scripts allow-modals allow-downloads allow-forms"
+                    />
+                  </div>
+                ) : slidesData.slice(0, pptConfig.slides).map((slide, index) => (
                   <div
                     key={index}
                     className={`slide-render-target relative border rounded-[48px] overflow-hidden shadow-sm aspect-video md:aspect-[21/9] lg:aspect-[2.4/1] transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}
