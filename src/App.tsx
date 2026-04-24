@@ -15,7 +15,7 @@ import {
   Video, Play, Pause, ChevronRight, CheckCircle2, Download, RefreshCw,
   Loader2, Eye, EyeOff, FileOutput, Heart, Copy, ExternalLink, Terminal,
   Settings as SettingsIcon, Info, UserCircle, X, Battery, Key, ShieldCheck, Check, Lock, LogOut,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Upload, Paperclip, File, Trash2
 } from "lucide-react";
 
 // Firebase Imports
@@ -25,6 +25,7 @@ import {
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, getDocFromServer, serverTimestamp } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
+import { RAGService, Chunk } from "./services/ragService";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -97,6 +98,22 @@ interface ConsoleLog {
   timestamp: number;
 }
 
+export interface UploadedFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  data: string; // base64 or text
+  mimeType: string;
+}
+
+export interface RecentWork {
+  id: string;
+  topic: string;
+  code: string;
+  timestamp: number;
+}
+
 export default function App() {
   const [generatedCode, setGeneratedCode] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -110,6 +127,92 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
   const [topic, setTopic] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [chunks, setChunks] = useState<Chunk[]>([]);
+  const [recentWorks, setRecentWorks] = useState<RecentWork[]>([]);
+  const [isIndexing, setIsIndexing] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    setIsIndexing(true);
+    const newFiles: UploadedFile[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const reader = new FileReader();
+
+      const fileData = await new Promise<string>((resolve) => {
+        reader.onload = (e) => {
+          const result = e.target?.result as string;
+          if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+             resolve(result); // Plain text
+          } else {
+             // Extract base64 part
+             const base64 = result.split(',')[1] || result;
+             resolve(base64);
+          }
+        };
+        if (file.type.startsWith('text/') || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+           reader.readAsText(file);
+        } else {
+           reader.readAsDataURL(file);
+        }
+      });
+
+      newFiles.push({
+        id: Math.random().toString(36).substr(2, 9),
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        data: fileData,
+        mimeType: file.type || 'application/octet-stream'
+      });
+    }
+
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+    
+    // RAG Indexing: Chunk the combined documents (Text files only)
+    if (ragService) {
+      const textFiles = newFiles.filter(f => f.type.startsWith('text/') || f.name.endsWith('.txt') || f.name.endsWith('.md'));
+      if (textFiles.length > 0) {
+        setIsIndexing(true);
+        try {
+          const combinedText = textFiles.map(f => `File: ${f.name}\n${f.data}`).join("\n\n---\n\n");
+          const newChunks = await ragService.chunkDocument(combinedText);
+          setChunks(prev => [...prev, ...newChunks]);
+        } catch (e) {
+          console.error("RAG Chunking failed", e);
+        } finally {
+          setIsIndexing(false);
+        }
+      }
+    } else {
+      // Fallback for indexing state if no service available
+      setTimeout(() => setIsIndexing(false), 1500);
+    }
+  };
+
+  const removeFile = (id: string) => {
+    setUploadedFiles(prev => {
+        const filtered = prev.filter(f => f.id !== id);
+        // If all files removed, clear chunks (simplification)
+        if (filtered.length === 0) setChunks([]);
+        return filtered;
+    });
+  };
+
+  const getGeminiParts = () => {
+    const parts = uploadedFiles.map(file => ({
+      inlineData: {
+        mimeType: file.mimeType,
+        data: file.data
+      }
+    }));
+    return parts;
+  };
+
   const [isLiked, setIsLiked] = useState(false);
   const [subtopics, setSubtopics] = useState<string[]>([]);
   const [activeSubtopicIndex, setActiveSubtopicIndex] = useState(0);
@@ -132,6 +235,11 @@ export default function App() {
 
   const [userApiKey, setUserApiKey] = useState("");
   const [isKeySaved, setIsKeySaved] = useState(false);
+
+  const ragService = useMemo(() => {
+    if (!userApiKey) return null;
+    return new RAGService(userApiKey);
+  }, [userApiKey]);
   const [tempApiKey, setTempApiKey] = useState("");
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -139,6 +247,23 @@ export default function App() {
   const [showApiKey, setShowApiKey] = useState(false);
   
   const previewRef = useRef<HTMLDivElement>(null);
+
+  // Connection Test
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+        console.log("Firestore connected successfully.");
+        setIsOffline(false);
+      } catch (error) {
+        if(error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
+          console.error("Firestore is offline. Please check your Firebase configuration or connection.");
+          setIsOffline(true);
+        }
+      }
+    }
+    testConnection();
+  }, []);
 
   // Listen for Auth State
   useEffect(() => {
@@ -156,8 +281,15 @@ export default function App() {
               setTempApiKey(data.geminiApiKey);
             }
           }
-        } catch (error) {
-          console.error("Error fetching user data:", error);
+        } catch (error: any) {
+          if (error.code === 'unavailable') {
+            console.error("Firestore backend is unavailable. Operating in offline mode.");
+            setIsOffline(true);
+            setAuthError("Syncing with cloud is currently unavailable. Your changes will be saved locally.");
+          } else {
+            console.error("Error fetching user data:", error);
+            handleFirestoreError(error, 'get', `users/${firebaseUser.uid}`);
+          }
         }
       } else {
         setUserApiKey("");
@@ -166,6 +298,42 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Load Recent Works based on User
+  useEffect(() => {
+    if (user) {
+      const saved = localStorage.getItem(`genie_recent_works_${user.uid}`);
+      if (saved) {
+        try {
+          setRecentWorks(JSON.parse(saved));
+        } catch (e) {
+          console.error("Failed to load recent works", e);
+          setRecentWorks([]);
+        }
+      } else {
+        setRecentWorks([]);
+      }
+    } else {
+      setRecentWorks([]);
+    }
+  }, [user]);
+
+  const saveToRecentWorks = (topic: string, code: string) => {
+    if (!user) return;
+
+    const newWork: RecentWork = {
+      id: Math.random().toString(36).substr(2, 9),
+      topic,
+      code,
+      timestamp: Date.now()
+    };
+    
+    setRecentWorks(prev => {
+      const updated = [newWork, ...prev].slice(0, 3);
+      localStorage.setItem(`genie_recent_works_${user.uid}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   const handleGoogleLogin = async () => {
     try {
@@ -209,7 +377,11 @@ export default function App() {
           geminiApiKey: tempApiKey,
           updatedAt: serverTimestamp()
         }, { merge: true });
-      } catch (error) {
+        setIsOffline(false);
+      } catch (error: any) {
+        if (error.code === 'unavailable') {
+           setIsOffline(true);
+        }
         handleFirestoreError(error, 'write', `users/${user.uid}`);
       }
     }
@@ -226,7 +398,8 @@ export default function App() {
     e.preventDefault();
     if (!topic.trim()) return;
     
-    const prompt = `I want to create a professional presentation about: "${topic}". Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Output ONLY the titles. Absolutely no introductory or concluding text. Just the titles.`;
+    const fileContext = uploadedFiles.length > 0 ? ` Please use the provided attached files (knowledge base) as primary reference material for the content.` : "";
+    const prompt = `I want to create a professional presentation about: "${topic}".${fileContext} Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Output ONLY the titles. Absolutely no introductory or concluding text. Just the titles.`;
     setCurrentPrompt(prompt);
     setView("ppt-structure-entry");
   };
@@ -242,9 +415,14 @@ export default function App() {
     setIsAILoading(true);
     setGenerationTimer(0);
     try {
+      const parts = [
+        ...getGeminiParts(),
+        { text: currentPrompt }
+      ];
+
       const result = await aiInstance.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: currentPrompt
+        contents: { parts }
       });
       setAiPasteBuffer(result.text || "");
     } catch (error: any) {
@@ -260,20 +438,48 @@ export default function App() {
 
   const automatedSubtopicGeneration = async () => {
     const aiInstance = getAiInstance();
-    if (!aiInstance) {
-      setApiError({ message: "GENIE AI API Key is missing. Please provide it in settings to continue.", type: 'missing' });
-      setIsSettingsOpen(true);
-      return;
+    if (!aiInstance || !ragService) {
+      if (!aiInstance) {
+          setApiError({ message: "GENIE AI API Key is missing. Please provide it in settings to continue.", type: 'missing' });
+          setIsSettingsOpen(true);
+          return;
+      }
     }
 
     setIsAILoading(true);
     setGenerationTimer(0);
     try {
-      const result = await aiInstance.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: currentPrompt
-      });
-      setAiPasteBuffer(result.text || "");
+      let finalContent = "";
+      
+      if (chunks.length > 0 && ragService) {
+        // RAG Pipeline
+        const subtopic = subtopics[activeSubtopicIndex];
+        const relevantChunks = await ragService.retrieveRelevantChunks(chunks, subtopic);
+        const contextString = await ragService.generateContextString(relevantChunks);
+        
+        let slideData = await ragService.generateSlide(subtopic, contextString);
+        const verification = await ragService.verifySlideDetailed(slideData, contextString);
+        
+        if (verification.score < 7) {
+          slideData = await ragService.regenerateSlideSmart(subtopic, contextString, verification.issues, verification.suggestions);
+        }
+        
+        finalContent = `${slideData.title}\n\n${slideData.points.map(p => `• ${p}`).join("\n")}`;
+      } else {
+        // Legacy flow
+        const parts = [
+          ...getGeminiParts(),
+          { text: currentPrompt }
+        ];
+
+        const result = await aiInstance!.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: { parts }
+        });
+        finalContent = result.text || "";
+      }
+      
+      setAiPasteBuffer(finalContent);
     } catch (error: any) {
       console.error("AI Subtopic Generation failed:", error);
       if (error?.message?.includes("API_KEY_INVALID") || error?.status === 403) {
@@ -296,9 +502,14 @@ export default function App() {
     setIsAILoading(true);
     setGenerationTimer(0);
     try {
+      const parts = [
+        ...getGeminiParts(),
+        { text: `${currentPrompt}\n\nIMPORTANT: Do NOT include any "Export to PDF" or "Download PDF" buttons or scripts in your output. The main application handles exporting. Focus only on a beautiful, interactive, and responsive web design. Ensure all scripts are inline or from trusted CDNs.` }
+      ];
+
       const result = await aiInstance.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: currentPrompt
+        contents: { parts }
       });
       const code = result.text || "";
       // Match content inside markdown code blocks (```html ... ```)
@@ -306,6 +517,7 @@ export default function App() {
       const strippedCode = codeMatch ? codeMatch[1].trim() : code.replace(/```html|```xml|```/g, "").trim();
       
       setGeneratedCode(strippedCode);
+      saveToRecentWorks(topic || "Untitled Synthesis", strippedCode);
       // Switch view after generation
       // setView("ppt-preview"); 
     } catch (error: any) {
@@ -327,11 +539,14 @@ export default function App() {
 
     setIsIterating(true);
     try {
-      const prompt = `Currently, the website code is as follows:\n\n${generatedCode}\n\nUser request for changes: "${iterativePrompt}"\n\nPlease output the updated FULL code for the website including the changes. Output ONLY the code block.`;
-      
+      const parts = [
+        ...getGeminiParts(),
+        { text: `Currently, the website code is as follows:\n\n${generatedCode}\n\nUser request for changes: "${iterativePrompt}"\n\nIMPORTANT: Do NOT include any "Export to PDF" or "Download PDF" buttons or scripts. Output the updated FULL code for the website including the changes. Output ONLY the code block.` }
+      ];
+
       const result = await aiInstance.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt
+        contents: { parts }
       });
       
       const code = result.text || "";
@@ -339,6 +554,7 @@ export default function App() {
       const strippedCode = codeMatch ? codeMatch[1].trim() : code.replace(/```html|```xml|```/g, "").trim();
       
       setGeneratedCode(strippedCode);
+      saveToRecentWorks(topic || "Updated Synthesis", strippedCode);
       setIterativePrompt("");
     } catch (error) {
       console.error("Iteration failed:", error);
@@ -826,6 +1042,11 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                           <ShieldCheck className="w-3 h-3" /> Synced
                         </div>
                       )}
+                      {isOffline && (
+                        <div className="flex items-center gap-1 text-red-500 text-[10px] font-bold uppercase tracking-wider bg-red-500/10 px-2 py-1 rounded-md">
+                          <Info className="w-3 h-3" /> Offline
+                        </div>
+                      )}
                     </div>
                     
                     <div className="space-y-3">
@@ -1011,6 +1232,52 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               ))}
             </div>
 
+            {/* Recent Work Section */}
+            {recentWorks.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.6 }}
+                className="mt-24"
+              >
+                <div className="flex items-center gap-3 mb-10">
+                  <RefreshCw className="w-5 h-5 text-blue-500 animate-[spin_4s_linear_infinite]" />
+                  <h2 className={`text-2xl font-display font-bold tracking-tight uppercase ${isDarkMode ? 'text-zinc-400' : 'text-gray-400'}`}>
+                    Recent Creations
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {recentWorks.map((work) => (
+                    <button
+                      key={work.id}
+                      onClick={() => {
+                        setTopic(work.topic);
+                        setGeneratedCode(work.code);
+                        setView("ppt-preview");
+                      }}
+                      className={`group p-6 rounded-3xl border text-left transition-all hover:scale-[1.02] active:scale-95 ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' : 'bg-white border-gray-100 hover:border-blue-100 shadow-sm'}`}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
+                          <Eye className="w-4 h-4" />
+                        </div>
+                        <span className="text-[10px] text-gray-500 font-mono">
+                          {new Date(work.timestamp).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <h4 className={`text-lg font-bold line-clamp-1 mb-2 ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                        {work.topic}
+                      </h4>
+                      <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
+                        A synthesized website experience based on AI models.
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
             <footer className={`mt-20 pt-12 border-t flex flex-col md:flex-row justify-between items-center gap-6 ${isDarkMode ? 'border-zinc-900' : 'border-gray-100'}`}>
               <p className="text-sm text-gray-400">
                 © 2026 Genie AI Studio. All rights reserved.
@@ -1176,7 +1443,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <p className="text-gray-500 text-lg">Tell us what your presentation is about, and we will generate the content</p>
             </header>
 
-            <form onSubmit={handleTopicSubmit} className="space-y-6">
+            <form onSubmit={handleTopicSubmit} className="space-y-8">
               <div className="relative group">
                 <textarea
                   value={topic}
@@ -1184,6 +1451,63 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                   placeholder="e.g. The impact of blockchain on global supply chains..."
                   className={`w-full h-32 p-6 text-xl border rounded-3xl focus:outline-none focus:ring-4 transition-all resize-none shadow-sm ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:ring-white/5 focus:border-zinc-700' : 'bg-white border-gray-100 focus:ring-blue-50 focus:border-blue-200'}`}
                 />
+              </div>
+
+              {/* File Upload Section */}
+              <div className="space-y-4 text-left">
+                <div className="flex items-center justify-between">
+                  <h4 className={`text-sm font-bold uppercase tracking-widest ${isDarkMode ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Knowledge Base (RAG)
+                  </h4>
+                  <span className="text-[10px] bg-blue-500/10 text-blue-500 px-2 py-1 rounded-md font-bold underline cursor-help" title="Augment generation with your own documents, images, and data">What is this?</span>
+                </div>
+                
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4`}>
+                  <label className={`relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${isDarkMode ? 'border-zinc-800 hover:border-zinc-600 bg-zinc-900/50 hover:bg-zinc-900' : 'border-gray-200 hover:border-blue-300 bg-white hover:bg-blue-50/30'}`}>
+                    <Upload className="w-8 h-8 text-blue-500 mb-2" />
+                    <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>Upload Files</span>
+                    <span className="text-[10px] text-gray-500 mt-1">PDF, Excel, Images, Video</span>
+                    <input type="file" multiple className="hidden" onChange={handleFileSelect} />
+                  </label>
+
+                  <div className={`flex flex-col gap-2 max-h-[140px] overflow-y-auto p-2 rounded-2xl transition-all ${isDarkMode ? 'bg-zinc-900/30' : 'bg-gray-50/50'} ${isIndexing ? 'opacity-50 grayscale' : ''}`}>
+                    {isIndexing && (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/5 rounded-2xl backdrop-blur-[1px]">
+                         <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 px-4 py-2 rounded-full shadow-lg border border-blue-500/30">
+                           <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                           <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">Indexing Data...</span>
+                         </div>
+                      </div>
+                    )}
+                    {uploadedFiles.length === 0 ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-50 italic text-[10px] py-8">
+                        <Paperclip className="w-5 h-5 mb-1" />
+                        No files attached
+                      </div>
+                    ) : (
+                      uploadedFiles.map(file => (
+                        <div key={file.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-100 shadow-sm'}`}>
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="p-1.5 bg-blue-500/10 rounded-lg shrink-0">
+                              <File className="w-3.5 h-3.5 text-blue-500" />
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className={`text-[10px] font-bold truncate ${isDarkMode ? 'text-white' : 'text-black'}`}>{file.name}</p>
+                              <p className="text-[8px] text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => removeFile(file.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
 
               <button
@@ -1469,37 +1793,49 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center gap-4">
-                  <button
-                    onClick={() => setIsLiked(!isLiked)}
-                    className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all ${isLiked ? 'bg-pink-500 text-white shadow-lg shadow-pink-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:text-pink-400 hover:border-pink-500/30' : 'bg-white text-gray-400 border border-gray-100 hover:border-pink-200 hover:text-pink-500')}`}
-                  >
-                    <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
-                    {isLiked ? "Liked!" : "Like Logic"}
-                  </button>
+                  {!generatedCode ? (
+                    <>
+                    <button
+                      onClick={() => setIsLiked(!isLiked)}
+                      className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all ${isLiked ? 'bg-pink-500 text-white shadow-lg shadow-pink-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:text-pink-400 hover:border-pink-500/30' : 'bg-white text-gray-400 border border-gray-100 hover:border-pink-200 hover:text-pink-500')}`}
+                    >
+                      <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+                      {isLiked ? "Liked!" : "Like Logic"}
+                    </button>
 
-                  <button
-                    onClick={exportToPDF}
-                    className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
-                  >
-                    <Download className="w-5 h-5" />
-                    Download PDF
-                  </button>
+                    <button
+                      onClick={exportToPDF}
+                      className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
+                    >
+                      <Download className="w-5 h-5" />
+                      Download PDF
+                    </button>
 
-                  <button
-                    onClick={downloadNotes}
-                    className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400 hover:bg-zinc-700' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}
-                  >
-                    <FileText className="w-5 h-5" />
-                    Notes PDF
-                  </button>
+                    <button
+                      onClick={downloadNotes}
+                      className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400 hover:bg-zinc-700' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}
+                    >
+                      <FileText className="w-5 h-5" />
+                      Notes PDF
+                    </button>
 
-                  <button
-                    onClick={handleFinalizePPTX}
-                    className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-200 hover:text-black'}`}
-                  >
-                    <FileOutput className="w-5 h-5" />
-                    PPTX
-                  </button>
+                    <button
+                      onClick={handleFinalizePPTX}
+                      className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-200 hover:text-black'}`}
+                    >
+                      <FileOutput className="w-5 h-5" />
+                      PPTX
+                    </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={exportToPDF}
+                      className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
+                    >
+                      <Download className="w-5 h-5" />
+                      Download Artifact
+                    </button>
+                  )}
                 </div>
               </header>
 
