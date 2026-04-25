@@ -15,7 +15,7 @@ import {
   Video, Play, Pause, ChevronRight, CheckCircle2, Download, RefreshCw,
   Loader2, Eye, EyeOff, FileOutput, Heart, Copy, ExternalLink, Terminal,
   Settings as SettingsIcon, Info, UserCircle, X, Battery, Key, ShieldCheck, Check, Lock, LogOut,
-  Maximize2, Minimize2, Upload, Paperclip, File, Trash2
+  Upload, Paperclip, File, Trash2
 } from "lucide-react";
 
 // Firebase Imports
@@ -116,7 +116,6 @@ export interface RecentWork {
 
 export default function App() {
   const [generatedCode, setGeneratedCode] = useState("");
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([]);
   const [iterativePrompt, setIterativePrompt] = useState("");
   const [isIterating, setIsIterating] = useState(false);
@@ -681,9 +680,9 @@ Presentation Content:
 ${contentStr}
 
 Website Requirements:
-1. Design & Color Protocol (Tiered HEX Enforcement): 
-   - DO NOT USE modern color spaces (oklch, oklab). 
-   - ENFORCE EXPLICIT HEX COLORS for all theme levels (Slate, Blue, Emerald).
+1. Design & Color Protocol (STRICT HEX ENFORCEMENT): 
+   - Use ONLY 6-digit hex codes (e.g., #111827 for dark backgrounds) and standard RGBA. 
+   - Modern oklch/oklab colors are STRICTLY FORBIDDEN as they break the PDF generator.
    - REMOVE ALL Tailwind opacity modifiers (e.g., bg-white/10). Replace with explicit rgba() values like bg-[rgba(255,255,255,0.1)].
    - Use standard RGBA for shadows and glass effects.
 2. Structure: One section per slide with clear headings and readable content. EACH section MUST have the class 'slide-render-target'.
@@ -694,7 +693,7 @@ Website Requirements:
    - Viewport Synchronization: Force the capture engine to behave as a high-resolution desktop screen (1920x1080).
 5. Icon Protocol: For "Storage" or power related sections, use a proper Battery icon.
 
-IMPORTANT: Make sure that the PDF download functionality is fully working at the end. Note that a common error to avoid is "Error generating PDF: Attempting to parse an unsupported color function 'oklab'".`;
+IMPORTANT: Make sure that the PDF download functionality is fully working at the end. Note that a common error to avoid is "Error generating PDF: Attempting to parse an unsupported color function 'oklab'". Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. Modern oklch/oklab colors are strictly forbidden.`;
 
     setCurrentPrompt(prompt);
     setView("ppt-generation-prompt");
@@ -709,77 +708,173 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
     setIsGenerating(true);
     
     try {
+      // Import libraries dynamically or ensure they are available
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const isPortrait = pptConfig.ratio === "9:16";
       const pdf = new jsPDF({
-        orientation: pptConfig.ratio === "9:16" ? "portrait" : "landscape",
+        orientation: isPortrait ? "p" : "l",
         unit: "px",
-        format: pptConfig.ratio === "9:16" ? [1080, 1920] : [1920, 1080]
+        format: isPortrait ? [1080, 1920] : [1920, 1080]
       });
 
-      let slides: HTMLElement[] = [];
-      const iframe = previewRef.current.querySelector('iframe');
-      
+      // Requirement 5: Wait for assets (images, fonts) to load
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      const container = previewRef.current;
+      const iframe = container?.querySelector('iframe');
+      let slideElements: HTMLElement[] = [];
+
       if (iframe && iframe.contentDocument) {
-        slides = Array.from(iframe.contentDocument.querySelectorAll('.slide-render-target')) as HTMLElement[];
-      }
-      
-      if (slides.length === 0) {
-        slides = Array.from(previewRef.current.querySelectorAll('.slide-render-target')) as HTMLElement[];
+        const doc = iframe.contentDocument;
+        slideElements = Array.from(doc.querySelectorAll('.slide-render-target')) as HTMLElement[];
+        if (slideElements.length === 0) slideElements = [doc.body]; // Target the whole generated site
+      } else if (container) {
+        slideElements = Array.from(container.querySelectorAll('.slide-render-target')) as HTMLElement[];
+        if (slideElements.length === 0) slideElements = [container]; // Final fallback
       }
 
-      if (slides.length === 0) {
-        const target = iframe || previewRef.current;
-        slides = [target as HTMLElement];
+      console.log(`Found slides: ${slideElements.length}`);
+
+      if (slideElements.length === 0) {
+        throw new Error("No content found to capture for PDF.");
       }
-      
-      for (let i = 0; i < slides.length; i++) {
-        const slide = slides[i];
-        const canvas = await html2canvas(slide, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-          width: pptConfig.ratio === "16:9" ? 1920 : 1080,
-          height: pptConfig.ratio === "16:9" ? 1080 : 1920,
-          onclone: (clonedDoc) => {
-            const allElements = clonedDoc.querySelectorAll('*');
-            allElements.forEach((el) => {
-              const element = el as HTMLElement;
-              element.style.opacity = '1';
-              element.style.visibility = 'visible';
-              element.style.transform = 'none';
-              element.style.animation = 'none';
-              element.style.transition = 'none';
+
+      console.log(`Starting PDF export for ${slideElements.length} slides...`);
+
+      for (let i = 0; i < slideElements.length; i++) {
+        const element = slideElements[i];
+        
+        try {
+          const canvas = await html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
+            onclone: (clonedDoc) => {
+              // Hide everything in the dashboard that isn't the presentation
+              const dashboardUI = clonedDoc.querySelectorAll('.lg\\:w-96, header, button');
+              dashboardUI.forEach(el => (el as HTMLElement).style.display = 'none');
+
+              // Deep Cleaning Script for cloned document elements
+              const allElements = clonedDoc.querySelectorAll('*');
               
-              const style = window.getComputedStyle(element);
-              if (style.backgroundColor && style.backgroundColor.includes('oklch')) {
-                 element.style.backgroundColor = '#3b82f6';
-              }
-              if (style.color && style.color.includes('oklch')) {
-                 element.style.color = '#000000';
-              }
-            });
-          }
-        });
-        
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
-        if (i > 0) pdf.addPage();
-        
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+              // Process style tags first to prevent CSS-based collisions
+              clonedDoc.querySelectorAll('style').forEach(s => {
+                if (s.textContent) {
+                  // Replace any instance of oklch or oklab in internal CSS with standard hex/rgb
+                  s.textContent = s.textContent.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(59, 130, 246)');
+                }
+              });
 
-        // Memory optimization: help garbage collector
-        canvas.width = 0;
-        canvas.height = 0;
+              allElements.forEach((el) => {
+                const node = el as HTMLElement;
+                
+                // Animation Reset: Prevent "ghost" slides by disabling motion
+                node.style.opacity = '1';
+                node.style.visibility = 'visible';
+                node.style.display = node.style.display === 'none' ? 'block' : node.style.display;
+                node.style.animation = 'none';
+                node.style.transition = 'none';
+                node.style.transform = 'none';
+                
+                // Computed Style Check: replace modern color functions with standard HEX/RGB
+                // We access computed styles directly from the node's style object for the clone
+                const style = window.getComputedStyle(node);
+                const hasUnsupportedColor = (val: string) => val && (val.includes('oklch') || val.includes('oklab') || val.includes('var'));
+                
+                if (hasUnsupportedColor(style.backgroundColor)) {
+                   node.style.setProperty('background-color', isDarkMode ? '#27272a' : '#3b82f6', 'important');
+                }
+                if (hasUnsupportedColor(style.color)) {
+                   node.style.setProperty('color', isDarkMode ? '#ffffff' : '#000000', 'important');
+                }
+                if (hasUnsupportedColor(style.borderColor)) {
+                   node.style.setProperty('border-color', isDarkMode ? '#3f3f46' : '#e4e4e7', 'important');
+                }
+
+                // Regex Strip: replace oklch/oklab in inline styles with standard RGB
+                const inlineStyle = node.getAttribute('style') || '';
+                if (inlineStyle.includes('oklch') || inlineStyle.includes('oklab')) {
+                  node.setAttribute('style', inlineStyle.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(59, 130, 246)'));
+                }
+              });
+            }
+          });
+
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          if (i > 0) pdf.addPage();
+          
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+          canvas.width = 0;
+          canvas.height = 0;
+        } catch (captureError) {
+          console.error(`Error capturing slide ${i + 1}:`, captureError);
+        }
       }
 
-      pdf.save(`Genie_AI_Presentation_${Date.now()}.pdf`);
+      // Requirement: Safer Blob Handling
+      const blob = pdf.output('blob');
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Genie_Presentation_${Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+
       setView("ppt-final");
     } catch (error) {
-      console.error("PDF Export failed", error);
+      console.error("Critical PDF Generation Error:", error);
+      alert("PDF generation failed. Please try again or check the console for details.");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const printToPDF = () => {
+    const iframe = previewRef.current?.querySelector('iframe');
+    if (!iframe) return;
+
+    // 1. Create a hidden frame or open a new window
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      // 2. Inject the code
+      printWindow.document.write(injectedCode);
+      
+      // 3. Force a "Print Media" CSS reset to ensure slides look right
+      const style = printWindow.document.createElement('style');
+      style.textContent = `
+        @media print {
+          @page { margin: 0; size: landscape; }
+          body { margin: 0; padding: 0; }
+          .slide-render-target { page-break-after: always; break-after: page; }
+        }
+      `;
+      printWindow.document.head.appendChild(style);
+      
+      printWindow.document.close();
+
+      // 4. Trigger the Print Dialog (User selects "Save as PDF")
+      setTimeout(() => {
+        printWindow.print();
+        // Optionially set view to final after print dialog is closed/handled
+        setView("ppt-final");
+      }, 500);
+    }
+  };
+
+  const handleOpenNewTab = () => {
+    const newWindow = window.open('', '_blank');
+    if (newWindow) {
+      newWindow.document.write(injectedCode);
+      newWindow.document.close();
     }
   };
 
@@ -1183,7 +1278,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               >
                 <span className="font-light italic font-serif">POWERED BY</span>
                 <span className={`font-bold tracking-widest text-3xl md:text-4xl underline decoration-[rgba(59,130,246,0.3)] underline-offset-8 decoration-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                  JAY SINGH
+                  JAY SINGH NAIK
                 </span>
               </motion.div>
             </header>
@@ -1618,20 +1713,20 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className={`inline-flex items-center gap-2 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 ${isDarkMode ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
                 <CheckCircle2 className="w-4 h-4" /> Content Compilation Complete
               </div>
-              <h2 className={`text-6xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>Review Final Content</h2>
+              <h2 className={`text-7xl md:text-8xl font-display font-bold mb-8 ${isDarkMode ? 'text-white' : 'text-black'}`}>Review Final Content</h2>
               <p className="text-gray-400 text-xl font-light">Here is the summarized structure for your presentation.</p>
             </header>
 
             <div className="space-y-6 mb-20">
               <div className={`border rounded-[40px] p-10 shadow-sm transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
-                <h3 className={`text-xs font-bold uppercase tracking-widest mb-8 pb-4 border-b ${isDarkMode ? 'text-zinc-500 border-zinc-800' : 'text-gray-300 border-gray-50'}`}>Main Topic: {topic}</h3>
+                <h3 className={`text-4xl md:text-5xl font-display font-bold mb-10 pb-6 border-b ${isDarkMode ? 'text-white border-zinc-800' : 'text-black border-gray-100'}`}>Main Topic: {topic}</h3>
                 
                 <div className="space-y-12">
                   {slidesData.slice(0, subtopics.length).map((slide, idx) => (
                     <div key={idx} className="flex gap-10">
                       <div className={`text-5xl font-display font-bold mt-[-8px] ${isDarkMode ? 'text-zinc-800' : 'text-gray-100'}`}>0{idx + 1}</div>
                       <div>
-                        <h4 className={`text-2xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>{slide.title}</h4>
+                        <h4 className={`text-3xl font-display font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>{slide.title}</h4>
                         <div className={`prose prose-sm whitespace-pre-wrap leading-relaxed font-light ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
                           {slide.text}
                         </div>
@@ -1669,7 +1764,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className={`inline-flex items-center gap-2 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 ${isDarkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
                 🚀 Step 03: Final Deployment
               </div>
-              <h2 className={`text-5xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>Your Website Prompt is Ready</h2>
+              <h2 className={`text-6xl font-display font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>Your Website Prompt is Ready</h2>
               <p className="text-gray-400 text-xl font-light max-w-2xl mx-auto">
                 Copy this comprehensive prompt to Google AI Studio Build to generate your interactive website with PDF export functionality.
               </p>
@@ -1787,7 +1882,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     <ChevronLeft className="w-6 h-6" />
                   </button>
                   <div>
-                    <h2 className={`text-3xl font-display font-medium ${isDarkMode ? 'text-white' : 'text-black'}`}>Website Preview</h2>
+                    <h2 className={`text-4xl font-display font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>Website Preview</h2>
                     <p className="text-gray-400">Review your presentation as a modern landing page.</p>
                   </div>
                 </div>
@@ -1804,7 +1899,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     </button>
 
                     <button
-                      onClick={exportToPDF}
+                      onClick={printToPDF}
                       className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                     >
                       <Download className="w-5 h-5" />
@@ -1829,7 +1924,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     </>
                   ) : (
                     <button
-                      onClick={exportToPDF}
+                      onClick={printToPDF}
                       className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                     >
                       <Download className="w-5 h-5" />
@@ -1842,23 +1937,14 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div ref={previewRef} className="space-y-12 h-full flex flex-col lg:flex-row gap-6">
                 {generatedCode ? (
                   <>
-                  <div className={`relative flex-1 rounded-[32px] overflow-hidden border border-gray-200 dark:border-zinc-800 bg-white transition-all duration-500 ${isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'h-[80vh]'}`}>
-                    {isFullscreen && (
-                      <button 
-                        onClick={() => setIsFullscreen(false)}
-                        className="absolute top-6 right-6 z-10 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full backdrop-blur-md transition-all border border-white/20"
-                      >
-                        <Minimize2 className="w-6 h-6" />
-                      </button>
-                    )}
-                    {!isFullscreen && (
-                      <button 
-                        onClick={() => setIsFullscreen(true)}
-                        className="absolute top-6 right-6 z-10 bg-blue-600/90 hover:bg-blue-600 text-white p-3 rounded-2xl shadow-xl transition-all border border-blue-400/20"
-                      >
-                        <Maximize2 className="w-5 h-5" />
-                      </button>
-                    )}
+                  <div className="relative flex-1 rounded-[32px] overflow-hidden border border-gray-200 dark:border-zinc-800 bg-white transition-all duration-500 h-[80vh]">
+                    <button 
+                      onClick={handleOpenNewTab}
+                      className="absolute top-6 right-6 z-10 bg-blue-600/90 hover:bg-blue-600 text-white p-3 rounded-2xl shadow-xl transition-all border border-blue-400/20"
+                      title="Open in New Tab"
+                    >
+                      <ExternalLink className="w-5 h-5" />
+                    </button>
                     <iframe
                       title="AI Synthesis Preview"
                       srcDoc={injectedCode}
@@ -1867,7 +1953,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     />
                   </div>
 
-                  <div className={`w-full lg:w-96 flex flex-col gap-4 ${isFullscreen ? 'hidden' : ''}`}>
+                  <div className="w-full lg:w-96 flex flex-col gap-4">
                     {/* Console Box */}
                     <div className={`flex-1 rounded-[24px] border transition-all overflow-hidden flex flex-col ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-gray-50 border-gray-100'}`}>
                       <div className="px-5 py-3 border-b border-inherit flex items-center justify-between">
@@ -1984,7 +2070,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className="absolute inset-0 bg-[rgba(59,130,246,0.2)] blur-[60px] animate-pulse" />
             </div>
 
-            <h2 className={`text-5xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            <h2 className={`text-6xl font-display font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>
               {isGenerating ? "Synthesizing..." : "Presentation Ready!"}
             </h2>
             <p className={`text-xl font-light mb-12 max-w-md mx-auto ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
@@ -1997,7 +2083,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               {!isGenerating && (
                 <div className="flex flex-col gap-4 w-full">
                   <button
-                    onClick={exportToPDF}
+                    onClick={printToPDF}
                     className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                   >
                     <Download className="w-5 h-5" /> Download PDF Again
