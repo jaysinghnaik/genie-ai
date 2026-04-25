@@ -6,8 +6,6 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import pptxgen from "pptxgenjs";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { GoogleGenAI, Type } from "@google/genai";
 import { 
   Presentation, FileText, Sparkles, ArrowRight, Github, ChevronLeft, 
@@ -390,6 +388,7 @@ export default function App() {
 
   const handleContentTypeSelect = () => {
     setPptConfig(prev => ({ ...prev, contentType: "ai" }));
+    setGeneratedCode(""); // Clear previous synthesis to avoid stale state
     setView("ppt-topic-entry");
   };
 
@@ -397,6 +396,7 @@ export default function App() {
     e.preventDefault();
     if (!topic.trim()) return;
     
+    setGeneratedCode(""); // Double safety: ensure code is cleared when topic is submitted
     const fileContext = uploadedFiles.length > 0 ? ` Please use the provided attached files (knowledge base) as primary reference material for the content.` : "";
     const prompt = `I want to create a professional presentation about: "${topic}".${fileContext} Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Output ONLY the titles. Absolutely no introductory or concluding text. Just the titles.`;
     setCurrentPrompt(prompt);
@@ -687,13 +687,15 @@ Website Requirements:
    - Use standard RGBA for shadows and glass effects.
 2. Structure: One section per slide with clear headings and readable content. EACH section MUST have the class 'slide-render-target'.
 3. Feature: Add a prominent "Download as PDF" button.
-4. Functionality: CRITICAL - Use html2canvas and jsPDF to capture the website sections as slides.
+4. Functionality: CRITICAL - Use the "Native Print" method (window.print()) to export the document as a PDF. 
+   - DO NOT use html2canvas-pro or jsPDF.
+   - Design for @media print to ensure perfect 16:9 slide formatting.
    - For PDF: Use a fixed ${pptConfig.ratio === '16:9' ? '1920x1080' : '1080x1920'} pixel format (Aspect Ratio: ${pptConfig.ratio}).
-   - ANIMATION SYNC: The "Download as PDF" function MUST force all elements to opacity: 1, remove all transforms (transform: none), and disable animations during capture. This resolves "missing content" caused by scroll-triggered animations.
-   - Viewport Synchronization: Force the capture engine to behave as a high-resolution desktop screen (1920x1080).
+   - Ensure each slide/section has a 'page-break-after: always' property to separate pages correctly.
+   - Design for a high-resolution desktop screen (1920x1080).
 5. Icon Protocol: For "Storage" or power related sections, use a proper Battery icon.
 
-IMPORTANT: Make sure that the PDF download functionality is fully working at the end. Note that a common error to avoid is "Error generating PDF: Attempting to parse an unsupported color function 'oklab'". Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. Modern oklch/oklab colors are strictly forbidden.`;
+IMPORTANT: Make sure that the PDF download functionality is fully working at the end. Use @media print styles to ensure perfect 16:9 slide formatting. Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. Modern oklch/oklab colors are strictly forbidden.`;
 
     setCurrentPrompt(prompt);
     setView("ppt-generation-prompt");
@@ -703,171 +705,38 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
     navigator.clipboard.writeText(text);
   };
 
-  const exportToPDF = async () => {
-    if (!previewRef.current) return;
-    setIsGenerating(true);
-    
-    try {
-      // Import libraries dynamically or ensure they are available
-      const html2canvas = (await import('html2canvas')).default;
-      const { jsPDF } = await import('jspdf');
-
-      const isPortrait = pptConfig.ratio === "9:16";
-      const pdf = new jsPDF({
-        orientation: isPortrait ? "p" : "l",
-        unit: "px",
-        format: isPortrait ? [1080, 1920] : [1920, 1080]
-      });
-
-      // Requirement 5: Wait for assets (images, fonts) to load
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const container = previewRef.current;
-      const iframe = container?.querySelector('iframe');
-      let slideElements: HTMLElement[] = [];
-
-      if (iframe && iframe.contentDocument) {
-        const doc = iframe.contentDocument;
-        slideElements = Array.from(doc.querySelectorAll('.slide-render-target')) as HTMLElement[];
-        if (slideElements.length === 0) slideElements = [doc.body]; // Target the whole generated site
-      } else if (container) {
-        slideElements = Array.from(container.querySelectorAll('.slide-render-target')) as HTMLElement[];
-        if (slideElements.length === 0) slideElements = [container]; // Final fallback
-      }
-
-      console.log(`Found slides: ${slideElements.length}`);
-
-      if (slideElements.length === 0) {
-        throw new Error("No content found to capture for PDF.");
-      }
-
-      console.log(`Starting PDF export for ${slideElements.length} slides...`);
-
-      for (let i = 0; i < slideElements.length; i++) {
-        const element = slideElements[i];
-        
-        try {
-          const canvas = await html2canvas(element, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: isDarkMode ? '#18181b' : '#ffffff',
-            onclone: (clonedDoc) => {
-              // Hide everything in the dashboard that isn't the presentation
-              const dashboardUI = clonedDoc.querySelectorAll('.lg\\:w-96, header, button');
-              dashboardUI.forEach(el => (el as HTMLElement).style.display = 'none');
-
-              // Deep Cleaning Script for cloned document elements
-              const allElements = clonedDoc.querySelectorAll('*');
-              
-              // Process style tags first to prevent CSS-based collisions
-              clonedDoc.querySelectorAll('style').forEach(s => {
-                if (s.textContent) {
-                  // Replace any instance of oklch or oklab in internal CSS with standard hex/rgb
-                  s.textContent = s.textContent.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(59, 130, 246)');
-                }
-              });
-
-              allElements.forEach((el) => {
-                const node = el as HTMLElement;
-                
-                // Animation Reset: Prevent "ghost" slides by disabling motion
-                node.style.opacity = '1';
-                node.style.visibility = 'visible';
-                node.style.display = node.style.display === 'none' ? 'block' : node.style.display;
-                node.style.animation = 'none';
-                node.style.transition = 'none';
-                node.style.transform = 'none';
-                
-                // Computed Style Check: replace modern color functions with standard HEX/RGB
-                // We access computed styles directly from the node's style object for the clone
-                const style = window.getComputedStyle(node);
-                const hasUnsupportedColor = (val: string) => val && (val.includes('oklch') || val.includes('oklab') || val.includes('var'));
-                
-                if (hasUnsupportedColor(style.backgroundColor)) {
-                   node.style.setProperty('background-color', isDarkMode ? '#27272a' : '#3b82f6', 'important');
-                }
-                if (hasUnsupportedColor(style.color)) {
-                   node.style.setProperty('color', isDarkMode ? '#ffffff' : '#000000', 'important');
-                }
-                if (hasUnsupportedColor(style.borderColor)) {
-                   node.style.setProperty('border-color', isDarkMode ? '#3f3f46' : '#e4e4e7', 'important');
-                }
-
-                // Regex Strip: replace oklch/oklab in inline styles with standard RGB
-                const inlineStyle = node.getAttribute('style') || '';
-                if (inlineStyle.includes('oklch') || inlineStyle.includes('oklab')) {
-                  node.setAttribute('style', inlineStyle.replace(/(oklch|oklab)\([^)]+\)/g, 'rgb(59, 130, 246)'));
-                }
-              });
-            }
-          });
-
-          const imgData = canvas.toDataURL('image/jpeg', 0.95);
-          if (i > 0) pdf.addPage();
-          
-          const pdfWidth = pdf.internal.pageSize.getWidth();
-          const pdfHeight = pdf.internal.pageSize.getHeight();
-          pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-          canvas.width = 0;
-          canvas.height = 0;
-        } catch (captureError) {
-          console.error(`Error capturing slide ${i + 1}:`, captureError);
-        }
-      }
-
-      // Requirement: Safer Blob Handling
-      const blob = pdf.output('blob');
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Genie_Presentation_${Date.now()}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(link);
-
-      setView("ppt-final");
-    } catch (error) {
-      console.error("Critical PDF Generation Error:", error);
-      alert("PDF generation failed. Please try again or check the console for details.");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const printToPDF = () => {
-    const iframe = previewRef.current?.querySelector('iframe');
-    if (!iframe) return;
-
-    // 1. Create a hidden frame or open a new window
+  const exportToPDF = () => {
     const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      // 2. Inject the code
-      printWindow.document.write(injectedCode);
-      
-      // 3. Force a "Print Media" CSS reset to ensure slides look right
-      const style = printWindow.document.createElement('style');
-      style.textContent = `
-        @media print {
-          @page { margin: 0; size: landscape; }
-          body { margin: 0; padding: 0; }
-          .slide-render-target { page-break-after: always; break-after: page; }
-        }
-      `;
-      printWindow.document.head.appendChild(style);
-      
-      printWindow.document.close();
-
-      // 4. Trigger the Print Dialog (User selects "Save as PDF")
-      setTimeout(() => {
-        printWindow.print();
-        // Optionially set view to final after print dialog is closed/handled
-        setView("ppt-final");
-      }, 500);
+    if (!printWindow) {
+      alert("Please allow pop-ups to download your presentation PDF.");
+      return;
     }
+
+    // Inject standard RGB colors and 16:9 Print CSS
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${topic || 'Genie AI Presentation'}</title>
+          <style>
+            @media print {
+              @page { size: 1920px 1080px landscape; margin: 0; }
+              body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              .slide-render-target, section, .slide { 
+                 page-break-after: always; height: 1080px; width: 1920px; 
+                 overflow: hidden; display: block !important;
+              }
+            }
+          </style>
+        </head>
+        <body>${injectedCode}</body>
+      </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => { 
+      printWindow.print(); 
+      printWindow.close(); 
+    }, 4000);
+    setView("ppt-final");
   };
 
   const handleOpenNewTab = () => {
@@ -939,36 +808,43 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
   };
 
   const downloadNotes = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.text(`PRESENTATION NOTES: ${topic.toUpperCase()}`, 10, 20);
-    doc.setFontSize(12);
-    doc.line(10, 25, 200, 25);
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
     
-    let y = 35;
-    slidesData.slice(0, pptConfig.slides).forEach((s, i) => {
-      if (y > 270) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.setFont("helvetica", "bold");
-      doc.text(`[SLIDE ${i + 1}] ${s.title || "Untitled"}`, 10, y);
-      y += 7;
-      
-      doc.setFont("helvetica", "normal");
-      const lines = doc.splitTextToSize(s.text || "", 180);
-      lines.forEach((line: string) => {
-        if (y > 280) {
-          doc.addPage();
-          y = 20;
-        }
-        doc.text(line, 10, y);
-        y += 6;
-      });
-      y += 10;
-    });
-    
-    doc.save(`${topic.replace(/\s+/g, '_')}_Presentation_Notes.pdf`);
+    const notesContent = slidesData.slice(0, pptConfig.slides).map((s, i) => `
+      <div style="margin-bottom: 30px; page-break-inside: avoid;">
+        <h2 style="margin-bottom: 5px;">[SLIDE ${i + 1}] ${s.title || "Untitled"}</h2>
+        <div style="white-space: pre-wrap;">${s.text || ""}</div>
+      </div>
+    `).join('');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Notes: ${topic}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+            h1 { text-align: center; border-bottom: 2px solid #ccc; padding-bottom: 20px; margin-bottom: 40px; }
+            h2 { color: #333; border-left: 4px solid #3b82f6; padding-left: 15px; }
+          </style>
+        </head>
+        <body>
+          <h1>PRESENTATION NOTES: ${topic.toUpperCase()}</h1>
+          ${notesContent}
+          <script>
+            window.onload = () => {
+              setTimeout(() => {
+                window.print();
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   const handleReset = () => {
@@ -1288,7 +1164,12 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               {apps.map((app, index) => (
                 <motion.button
                   key={app.id}
-                  onClick={() => app.id === "ppt-maker" && setView("ppt-config")}
+                  onClick={() => {
+                    if (app.id === "ppt-maker") {
+                      setGeneratedCode("");
+                      setView("ppt-config");
+                    }
+                  }}
                   initial={{ opacity: 0, y: 30 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.8, delay: 0.3 + index * 0.1 }}
@@ -1899,7 +1780,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     </button>
 
                     <button
-                      onClick={printToPDF}
+                      onClick={exportToPDF}
                       className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                     >
                       <Download className="w-5 h-5" />
@@ -1924,7 +1805,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                     </>
                   ) : (
                     <button
-                      onClick={printToPDF}
+                      onClick={exportToPDF}
                       className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                     >
                       <Download className="w-5 h-5" />
@@ -2083,7 +1964,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               {!isGenerating && (
                 <div className="flex flex-col gap-4 w-full">
                   <button
-                    onClick={printToPDF}
+                    onClick={exportToPDF}
                     className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                   >
                     <Download className="w-5 h-5" /> Download PDF Again

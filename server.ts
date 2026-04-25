@@ -16,7 +16,7 @@ async function startServer() {
 
   // API Route: Render PDF using Puppeteer
   app.post('/api/render-pdf', async (req, res) => {
-    const { html, width = 1920, height = 1080, delay = 2000 } = req.body;
+    const { html, width = 1920, height = 1080, delay = 4000 } = req.body;
 
     if (!html) {
       return res.status(400).json({ error: 'No HTML content provided' });

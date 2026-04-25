@@ -6,7 +6,7 @@
   --font-display: "Outfit", sans-serif;
 
   /* Tier 1: Theme-Level HEX Enforcement */
-  /* Overriding Tailwind v4 defaults for html2canvas compatibility */
+  /* Overriding Tailwind v4 defaults for html2canvas-pro compatibility */
   --color-slate-50: #f8fafc;
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
