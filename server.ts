@@ -1,6 +1,6 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import puppeteer from 'puppeteer';
+import { chromium } from 'playwright';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import bodyParser from 'body-parser';
@@ -12,11 +12,11 @@ async function startServer() {
   const PORT = 3000;
 
   // Increase payload limit for large HTML presentations
-  app.use(bodyParser.json({ limit: '50mb' }));
+  app.use(bodyParser.json({ limit: '100mb' }));
 
-  // API Route: Render PDF using Puppeteer
+  // API Route: Render PDF using Playwright (High Fidelity)
   app.post('/api/render-pdf', async (req, res) => {
-    const { html, width = 1920, height = 1080, delay = 4000 } = req.body;
+    const { html, width = 1920, height = 1080, delay = 4000, theme = 'dark' } = req.body;
 
     if (!html) {
       return res.status(400).json({ error: 'No HTML content provided' });
@@ -24,40 +24,47 @@ async function startServer() {
 
     let browser;
     try {
-      console.log('Launching Puppeteer...');
-      browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: true
+      console.log('Launching Playwright Chromium...');
+      browser = await chromium.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
       });
 
-      const page = await browser.newPage();
+      const context = await browser.newContext({
+        viewport: { width, height },
+        deviceScaleFactor: 2, // High DPI for crisp text/icons
+        colorScheme: theme === 'dark' ? 'dark' : 'light'
+      });
+
+      const page = await context.newPage();
       
-      // Set viewport to the requested presentation aspect ratio
-      await page.setViewport({ width, height });
+      // Load the HTML content with networkidle to ensure CDNs are loaded
+      console.log('Setting page content and waiting for stability...');
+      await page.setContent(html, { waitUntil: 'networkidle' });
 
-      // Load the HTML content
-      console.log('Setting page content...');
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      // Emulate media to ensure colors are preserved as they appear on screen
+      await page.emulateMedia({ media: 'screen' });
 
-      // Step D: The Delay - Wait for animations to finish
-      console.log(`Waiting ${delay}ms for animations...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Artificial delay for specific motion-based animations if requested
+      if (delay > 0) {
+        console.log(`Waiting ${delay}ms for specific animations...`);
+        await page.waitForTimeout(delay);
+      }
 
-      // Step E: Print to PDF
-      console.log('Generating PDF...');
+      console.log('Generating High-Fidelity PDF...');
       const pdfBuffer = await page.pdf({
         printBackground: true,
         width: `${width}px`,
         height: `${height}px`,
-        pageRanges: '1', // We assume one long page or it handles pagination
+        margin: { top: 0, right: 0, bottom: 0, left: 0 },
+        scale: 1,
         preferCSSPageSize: true
       });
 
       res.contentType('application/pdf');
       res.send(pdfBuffer);
-      console.log('PDF sent successfully.');
+      console.log('PDF generated successfully.');
     } catch (error: any) {
-      console.error('Puppeteer Error:', error);
+      console.error('Playwright Error:', error);
       res.status(500).json({ error: error.message || 'Failed to generate PDF' });
     } finally {
       if (browser) await browser.close();

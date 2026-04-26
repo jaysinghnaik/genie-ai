@@ -82,11 +82,11 @@ const apps = [
   {
     id: "ieee-maker",
     title: "AI IEEE Maker",
-    description: "Format and generate academic-grade IEEE papers with automated citations and structure.",
+    description: "Convert ideas into conference-ready IEEE formatted research papers automatically.",
     icon: <FileText className="w-8 h-8 text-emerald-500" />,
-    color: "from-emerald-50/50 to-teal-50/50",
-    borderColor: "group-hover:border-emerald-200",
-    tag: "Soon"
+    color: "from-emerald-500/20 to-teal-500/20",
+    borderColor: "hover:border-emerald-500/50",
+    tag: "Scientific"
   }
 ];
 
@@ -129,6 +129,9 @@ export default function App() {
   const [recentWorks, setRecentWorks] = useState<RecentWork[]>([]);
   const [isIndexing, setIsIndexing] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [selectedApp, setSelectedApp] = useState<string>("ppt-maker");
+  const [references, setReferences] = useState<string[]>([]);
 
   const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -201,12 +204,43 @@ export default function App() {
   };
 
   const getGeminiParts = () => {
-    const parts = uploadedFiles.map(file => ({
+    const isIEEE = selectedApp === "ieee-maker";
+    const systemPrompt = isIEEE 
+      ? `You are an expert academic researcher and LaTeX/Web formatter. Your goal is to generate a conference-ready research paper adhering strictly to IEEE standards.
+
+STRICT IEEE FORMATTING RULES:
+1. Double Column Layout: Use a two-column grid (grid-cols-2) for the main body. Title and Abstract MUST span both columns (col-span-2).
+2. Typography: Use "Times New Roman", serif for all text. Body text: 10pt (0.875rem), Title: 24pt (1.5rem and bold), Section Headings: 10pt All-Caps or Small-Caps.
+3. Citations: Use bracketed numbers [1], [2] in text. References must be a separate section at the end, numbered by order of appearance.
+4. Figures & Tables: Figure captions MUST be below the figure (e.g., Fig. 1. Description). Table titles MUST be above (e.g., TABLE I. Title in Small-Caps).
+5. Math: Center equations on their own line with a right-aligned parenthetical number (1).
+6. Alignment: Body text MUST be justified (text-justify).
+7. Sections: Follow standard IEEE structure: Title, Authors (use placeholders), Abstract, Index Terms, I. Introduction, II. Related Work, III. Methodology, IV. Results, V. Conclusion, References.
+
+Output ONLY the final code block (usually HTML/Tailwind). Use a white background style that looks like a printed paper.`
+      : `You are a world-class presentation designer and web developer. Your goal is to create a high-fidelity, professional presentation as a responsive web experience.
+
+STRICT VERTICAL CONTAINMENT RULES:
+1. Viewport Locking: Every slide container (.slide-render-target) MUST have overflow: hidden; and display: flex; flex-direction: column;. This ensures no content leaks into the next page.
+2. The 80% Rule: Content must only occupy the top 80% of the 1080px (simulated) height. The bottom 200px must be reserved for footers and "breathing room" to prevent clipping at the PDF edge.
+3. Auto-Scaling Text: Use CSS clamp() for font sizes. This ensures that if the content is slightly longer, the font shrinks to fit the container.
+4. Content Distillation: If a technical explanation exceeds 45 words, you MUST summarize it into 3 bullet points. No 'Wall of Text' allowed.
+5. Grid Geometry: Use strict grid layouts for content cards (e.g., grid-template-rows: repeat(2, 1fr)) to keep cards in their quadrants regardless of text length.
+6. Design Aesthetic: Use a modern, high-contrast palette. Preferred fonts: Inter, JetBrains Mono for technical data.
+
+Output ONLY the final code block (usually HTML/Tailwind).`;
+
+    const parts: any[] = [
+      { text: systemPrompt }
+    ];
+
+    parts.push(...uploadedFiles.map(file => ({
       inlineData: {
         mimeType: file.mimeType,
         data: file.data
       }
-    }));
+    })));
+
     return parts;
   };
 
@@ -397,8 +431,23 @@ export default function App() {
     if (!topic.trim()) return;
     
     setGeneratedCode(""); // Double safety: ensure code is cleared when topic is submitted
+    const isIEEE = selectedApp === "ieee-maker";
     const fileContext = uploadedFiles.length > 0 ? ` Please use the provided attached files (knowledge base) as primary reference material for the content.` : "";
-    const prompt = `I want to create a professional presentation about: "${topic}".${fileContext} Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Output ONLY the titles. Absolutely no introductory or concluding text. Just the titles.`;
+    
+    const prompt = isIEEE
+      ? `Provide a list of exactly ${Math.max(1, pptConfig.slides - 1)} major core research section titles (e.g., Methodology, Literature Review, results, etc.) for an IEEE conference paper about: "${topic}". 
+         
+         RULES:
+         - DO NOT write the paper yet.
+         - DO NOT include Abstract, Keywords, Introduction, Conclusion, or References.
+         - Output ONLY the list of titles, one per line.
+         - No numbers, no bullet points, no markdown, no conversational text.
+         - Example output:
+         Literature Review
+         Proposed Methodology
+         Experimental Results`
+      : `I want to create a professional presentation about: "${topic}".${fileContext} Provide exactly ${pptConfig.slides} distinct sub-topics for the slides. Format each sub-topic on a new line and DO NOT include numbers or bullet points. Output ONLY the titles. Absolutely no introductory or concluding text. Just the titles.`;
+    
     setCurrentPrompt(prompt);
     setView("ppt-structure-entry");
   };
@@ -450,8 +499,8 @@ export default function App() {
     try {
       let finalContent = "";
       
-      if (chunks.length > 0 && ragService) {
-        // RAG Pipeline
+      if (chunks.length > 0 && ragService && selectedApp !== 'ieee-maker') {
+        // RAG Pipeline for presentations
         const subtopic = subtopics[activeSubtopicIndex];
         const relevantChunks = await ragService.retrieveRelevantChunks(chunks, subtopic);
         const contextString = await ragService.reduceTokens(relevantChunks);
@@ -465,7 +514,7 @@ export default function App() {
         
         finalContent = `${slideData.title}\n\n${slideData.points.map((p: any) => `• ${typeof p === 'string' ? p : p.text}`).join("\n")}`;
       } else {
-        // Legacy flow
+        // Core Section Generation for IEEE or standard PPT flow without RAG
         const parts = [
           ...getGeminiParts(),
           { text: currentPrompt }
@@ -503,7 +552,11 @@ export default function App() {
     try {
       const parts = [
         ...getGeminiParts(),
-        { text: `${currentPrompt}\n\nIMPORTANT: Do NOT include any "Export to PDF" or "Download PDF" buttons or scripts in your output. The main application handles exporting. Focus only on a beautiful, interactive, and responsive web design. Ensure all scripts are inline or from trusted CDNs.` }
+        { text: `${currentPrompt}\n\nIMPORTANT:
+1. Follow the STRICT VERTICAL CONTAINMENT RULES provided in the system instruction.
+2. Do NOT include any "Export to PDF" or "Download PDF" buttons or scripts.
+3. Use Tailwind CSS for 100% of styling.
+4. Output ONLY the code block.` }
       ];
 
       const result = await aiInstance.models.generateContent({
@@ -540,7 +593,9 @@ export default function App() {
     try {
       const parts = [
         ...getGeminiParts(),
-        { text: `Currently, the website code is as follows:\n\n${generatedCode}\n\nUser request for changes: "${iterativePrompt}"\n\nIMPORTANT: Do NOT include any "Export to PDF" or "Download PDF" buttons or scripts. Output the updated FULL code for the website including the changes. Output ONLY the code block.` }
+        { text: `Currently, the website code is as follows:\n\n${generatedCode}\n\nUser request for changes: "${iterativePrompt}"\n\nIMPORTANT:
+1. Maintain all STRICT VERTICAL CONTAINMENT RULES.
+2. Output ONLY the updated FULL code block (Tailwind + HTML).` }
       ];
 
       const result = await aiInstance.models.generateContent({
@@ -600,6 +655,16 @@ export default function App() {
           window.onerror = (msg, url, line) => {
             send('error', [\`Uncaught Error: \${msg} at \${line}\`]);
           };
+
+          // Listen for HTML requests from parent (used for PDF export of edited content)
+          window.addEventListener('message', (e) => {
+            if (e.data?.type === 'request-html-sync') {
+              window.parent.postMessage({
+                type: 'response-html-sync',
+                html: document.documentElement.outerHTML
+              }, '*');
+            }
+          });
         })();
       </script>
     `;
@@ -621,18 +686,36 @@ export default function App() {
   const handleStructureProcess = () => {
     if (!aiPasteBuffer.trim()) return;
     
-    const extracted = aiPasteBuffer.split('\n')
+    // Clean up buffer from common AI artifacts
+    const cleanBuffer = aiPasteBuffer
+      .replace(/```[a-z]*\n/g, '')
+      .replace(/```/g, '')
+      .replace(/<[^>]*>?/gm, '') // Remove HTML tags if any
+      .trim();
+
+    const extracted = cleanBuffer.split('\n')
       .map(line => line.replace(/^\d+\.\s*|-\s*/, '').trim())
-      .filter(line => line.length > 0 && !line.endsWith(':') && line.length < 100)
-      .slice(0, pptConfig.slides);
+      .filter(line => line.length > 0 && !line.endsWith(':') && line.length < 100 && !line.toLowerCase().includes('here is') && !line.toLowerCase().includes('section titles'))
+      .slice(0, selectedApp === "ieee-maker" ? Math.max(1, pptConfig.slides - 1) : pptConfig.slides);
     
     if (extracted.length === 0) return;
     
     setSubtopics(extracted);
     setActiveSubtopicIndex(0);
     setAiPasteBuffer("");
+    setReferences([]); // Reset references for new paper
     
-    const firstSubtopicPrompt = `Explain the sub-topic "${extracted[0]}" for a presentation about "${topic}". Provide a clear, engaging slide title and exactly 4 detailed bullet points summarizing the key aspects of this sub-topic.`;
+    const isIEEE = selectedApp === "ieee-maker";
+    const firstSubtopicPrompt = isIEEE
+      ? `Draft the research section "${extracted[0]}" for an IEEE paper about "${topic}". 
+         REQUIREMENTS:
+         1. Word Count: Total 600-1000 words. 
+         2. Structure: If the topic has two distinct parts, use sub-headings (e.g., A. First Part, B. Second Part) with 300-500 words each. Otherwise, provide one continuous technical deep-dive.
+         3. Tone: Formal academic, technical, and precise.
+         4. Citations: Use placeholders [1], [2], etc.
+         5. References: At the very end of your response, provide a list of full academic references for any facts used, starting with the exact header "REFERENCES:".`
+      : `Explain the sub-topic "${extracted[0]}" for a presentation about "${topic}". Provide a clear, engaging slide title and exactly 4 detailed bullet points summarizing the key aspects of this sub-topic.`;
+    
     setCurrentPrompt(firstSubtopicPrompt);
     setView("ppt-subtopic-entry");
   };
@@ -640,17 +723,32 @@ export default function App() {
   const handleSubtopicProcess = () => {
     if (!aiPasteBuffer.trim()) return;
     
+    const isIEEE = selectedApp === "ieee-maker";
+    let bodyText = aiPasteBuffer;
+    
+    if (isIEEE) {
+      // Extract references if they exist
+      const refMatch = aiPasteBuffer.match(/REFERENCES:([\s\S]*)$/i);
+      if (refMatch) {
+         const newRefs = refMatch[1].split('\n')
+           .map(r => r.trim())
+           .filter(r => r.length > 5);
+         setReferences(prev => {
+           const combined = [...prev, ...newRefs];
+           // Remove duplicates while keeping order
+           return combined.filter((item, pos) => combined.indexOf(item) === pos);
+         });
+         // Strip references from body text for display
+         bodyText = aiPasteBuffer.split(/REFERENCES:/i)[0].trim();
+      }
+    }
+
     setSlidesData(prev => {
       const newData = [...prev];
-      // Basic parsing of the AI response (using the prompt instructions as a guide)
-      const lines = aiPasteBuffer.split('\n').filter(l => l.trim().length > 0);
-      const title = subtopics[activeSubtopicIndex];
-      const body = aiPasteBuffer; // Use full text for body
-      
       newData[activeSubtopicIndex] = {
         ...newData[activeSubtopicIndex],
-        title: title,
-        text: body,
+        title: subtopics[activeSubtopicIndex],
+        text: bodyText,
         mediaType: 'none',
         mediaUrl: ''
       };
@@ -661,7 +759,15 @@ export default function App() {
       const nextIndex = activeSubtopicIndex + 1;
       setActiveSubtopicIndex(nextIndex);
       setAiPasteBuffer("");
-      const nextPrompt = `Explain the sub-topic "${subtopics[nextIndex]}" for a presentation about "${topic}". Provide a clear, engaging slide title and exactly 4 detailed bullet points summarizing the key aspects of this sub-topic.`;
+      const nextPrompt = isIEEE
+        ? `Draft the research section "${subtopics[nextIndex]}" for an IEEE paper about "${topic}". 
+           REQUIREMENTS:
+           1. Word Count: Total 600-1000 words. 
+           2. Structure: If the topic has two distinct parts, use sub-headings (e.g., A. First Part, B. Second Part) with 300-500 words each.
+           3. Citations: Use placeholders [1], [2], etc. continuing the sequence from previous sections.
+           4. References: At the very end of your response, provide a list of full academic references for any facts used, starting with the exact header "REFERENCES:".`
+        : `Explain the sub-topic "${subtopics[nextIndex]}" for a presentation about "${topic}". Provide a clear, engaging slide title and exactly 4 detailed bullet points summarizing the key aspects of this sub-topic.`;
+      
       setCurrentPrompt(nextPrompt);
     } else {
       setView("ppt-summary-preview");
@@ -670,32 +776,89 @@ export default function App() {
   };
 
   const generateFinalPrompt = () => {
-    let contentStr = slidesData.slice(0, subtopics.length).map((s, i) => `Slide ${i + 1}: ${s.title}\nContent: ${s.text}`).join('\n\n');
+    const isIEEE = selectedApp === "ieee-maker";
+    let contentStr = slidesData.slice(0, subtopics.length).map((s, i) => `${isIEEE ? 'Section' : 'Slide'} ${i + 1}: ${s.title}\nContent: ${s.text}`).join('\n\n');
     
-    const prompt = `I want to build a high-fidelity, professional website in Google AI Studio Build based on the following presentation content.
+    const paperRequirements = `IEEE MANUSCRIPT REQUIREMENTS & PRINT PROTOCOL:
+1. FULL EDITABILITY:
+   - Wrap ALL text blocks (Title, Authors, Abstract, Section Headings, Paragraphs) in <div contentEditable="true" class="hover:bg-blue-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 rounded p-1 transition-all">.
+2. DYNAMIC FIGURE SLOTS (ONE PER SECTION):
+   - At the bottom of every major section (e.g., Introduction, Methodology), provide a figure placeholder:
+     <div class="figure-slot border-2 border-dashed border-gray-200 rounded-lg p-8 my-6 text-center no-print">
+       <div class="figure-controls flex items-center justify-center gap-4">
+         <button onclick="this.closest('.figure-slot').querySelector('input').click()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Insert Figure
+         </button>
+         <button onclick="this.closest('.figure-slot').remove()" class="text-gray-400 hover:text-red-500 p-2 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+         </button>
+       </div>
+       <input type="file" accept="image/*" class="hidden" onchange="const slot=this.closest('.figure-slot'); const img=document.createElement('img'); img.src=URL.createObjectURL(this.files[0]); img.className='w-full h-auto rounded-lg mb-2'; slot.innerHTML=''; slot.appendChild(img); slot.classList.remove('no-print'); slot.classList.add('has-image'); const cap=document.createElement('div'); cap.contentEditable='true'; cap.className='text-center text-[8pt] italic'; cap.innerText='Fig. X. Description'; slot.appendChild(cap);">
+       <p class="text-[8px] text-gray-400 mt-2">Placeholder: Will be hidden in final PDF if ignored.</p>
+     </div>
+3. PRINT FIDELITY (ZERO WATERMARK):
+   - CRITICAL: NO "Download as PDF" button should be rendered inside the '.paper-container'.
+   - Use @media print to hide EVERYTHING interactive.
+   - CSS Requirements: 
+     @media print { 
+        .no-print, .figure-slot:not(.has-image), button, input { display: none !important; } 
+        body { background: white !important; padding: 0 !important; margin: 0 !important; }
+        .paper-container { margin: 0 !important; box-shadow: none !important; width: 100% !important; padding: 0.5in !important; }
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+     }
+4. ABSTRACT & KEYWORDS (META GENERATION): 
+   - Based on the core sections provided, synthesize a 150-250 word Abstract. 
+   - Include 3-5 relevant Index Terms (Keywords).
+5. INTRODUCTION & CONCLUSION (SYNTHESIS):
+   - You MUST generate a formal "I. INTRODUCTION" section (400-600 words) as the first body section.
+   - You MUST generate a formal "CONCLUSION" section (200-300 words) as the last body section.
+   - Core research sections provided because context must follow the Introduction and be numbered correctly (II, III, IV, etc.).
+6. ACKNOWLEDGMENTS: Include a brief Acknowledgments section after the conclusion.
+7. REFERENCES (BIBLIOGRAPHY): 
+   - Use the exact "REFERENCES:" data collected during the research phase.
+   - List them in a final "References" section at the end of the paper using IEEE numeric format [1], [2], etc.
+8. DOUBLE COLUMN LAYOUT: Use grid-cols-2 for the main body. Title and Abstract MUST span both columns (col-span-2).
+9. TYPOGRAPHY: Use "Times New Roman", serif. Body: 10pt (0.875rem), Title: 24pt (1.5rem, bold), Section Headings: 10pt (bold/caps).
+10. ALIGNMENT: Body text MUST be justified (text-justify).`;
+
+    const slideRequirements = `Presentation Content Requirements:
+1. Design & Color Protocol (STRICT HEX ENFORCEMENT): 
+   - Use ONLY 6-digit hex codes (e.g., #111827 for dark backgrounds) and standard RGBA. 
+   - Modern oklch/oklab colors are STRICTLY FORBIDDEN.
+   - REMOVE ALL Tailwind opacity modifiers (e.g., bg-white/10). Use explicit rgba().
+2. STRICT VERTICAL CONTAINMENT: 
+   - EACH slide MUST use the class 'slide-render-target'. It must fill exactly one 1920x1080 viewport.
+   - INTERNAL STRUCTURE: Inside 'slide-render-target', use a div with class 'slide-content-area' for the main content (title + grid/body).
+   - THE 80% RULE: Content must strictly stay within 'slide-content-area' (fixed at 864px height). This prevents content from leaking into the footer or next slide.
+   - THE FOOTER ZONE: Reserve the bottom 216px (the 'slide-footer-area' class) for slide numbers or empty space.
+3. GRID GEOMETRY: 
+   - For multi-card layouts, use a div with class 'slide-grid'. 
+   - It MUST use 'grid-template-rows: repeat(2, 1fr);' and 'grid-template-columns: repeat(2, 1fr);' to force a 4-quadrant layout. This ensures no content leaks vertically.
+4. Typography: Use CSS clamp() indirectly via the classes 'slide-title', 'slide-subtitle', and 'slide-body' to allow auto-scaling.
+5. Content Distillation: MANDATORY. If any card or section exceeds 45 words, summarize into 3 bullet points. No 'Wall of Text' allowed.
+`;
+
+    const prompt = `I want to build a high-fidelity, professional ${isIEEE ? 'IEEE Research Paper' : 'website presentation'} based on the following content.
 
 Main Topic: ${topic}
 
-Presentation Content:
-${contentStr}
+${isIEEE ? 'PAPER CONTENT (Core Sections):' : 'Presentation Content:'}
+${contentStr} 
 
-Website Requirements:
-1. Design & Color Protocol (STRICT HEX ENFORCEMENT): 
-   - Use ONLY 6-digit hex codes (e.g., #111827 for dark backgrounds) and standard RGBA. 
-   - Modern oklch/oklab colors are STRICTLY FORBIDDEN as they break the PDF generator.
-   - REMOVE ALL Tailwind opacity modifiers (e.g., bg-white/10). Replace with explicit rgba() values like bg-[rgba(255,255,255,0.1)].
-   - Use standard RGBA for shadows and glass effects.
-2. Structure: One section per slide with clear headings and readable content. EACH section MUST have the class 'slide-render-target'.
-3. Feature: Add a prominent "Download as PDF" button.
-4. Functionality: CRITICAL - Use the "Native Print" method (window.print()) to export the document as a PDF. 
-   - DO NOT use html2canvas-pro or jsPDF.
-   - Design for @media print to ensure perfect 16:9 slide formatting.
-   - For PDF: Use a fixed ${pptConfig.ratio === '16:9' ? '1920x1080' : '1080x1920'} pixel format (Aspect Ratio: ${pptConfig.ratio}).
-   - Ensure each slide/section has a 'page-break-after: always' property to separate pages correctly.
-   - Design for a high-resolution desktop screen (1920x1080).
-5. Icon Protocol: For "Storage" or power related sections, use a proper Battery icon.
+${isIEEE ? `COLLECTED REFERENCES FOUND DURING RESEARCH:\n${references.join('\n')}\n` : ''}
 
-IMPORTANT: Make sure that the PDF download functionality is fully working at the end. Use @media print styles to ensure perfect 16:9 slide formatting. Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. Modern oklch/oklab colors are strictly forbidden.`;
+STRICT REQUIREMENTS:
+${isIEEE ? paperRequirements : slideRequirements}
+6. Feature: Add a prominent "Download as PDF" button.
+7. Functionality: CRITICAL - Use the "Native Print" method (window.print()) to export as PDF. 
+   - Design for @media print to ensure perfect ${isIEEE ? 'Letter size (8.5x11)' : '16:9 slide'} formatting.
+   - Ensure each ${isIEEE ? 'page' : 'slide'} has 'page-break-after: always'.
+8. STABILITY: 
+   - Animations, transitions, and unintended layout shifts are STRICTLY FORBIDDEN.
+   - The rendered HTML must be static and stable for high-fidelity capture.
+9. Icon Protocol: For "Storage" or power related sections, use a proper Battery icon.
+
+IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No modern color formats. ${isIEEE ? 'Layout must be professional white paper format.' : 'Each slide must be a perfect 16:9 rectangle.'}`;
 
     setCurrentPrompt(prompt);
     setView("ppt-generation-prompt");
@@ -705,7 +868,33 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
     navigator.clipboard.writeText(text);
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
+    let htmlToPrint = injectedCode;
+    
+    try {
+       // Request latest HTML from iframe
+       htmlToPrint = await new Promise<string>((resolve) => {
+         const timeout = setTimeout(() => {
+           window.removeEventListener('message', handleSync);
+           resolve(injectedCode);
+         }, 1000);
+
+         const handleSync = (event: MessageEvent) => {
+           if (event.data?.type === 'response-html-sync') {
+             clearTimeout(timeout);
+             window.removeEventListener('message', handleSync);
+             resolve(event.data.html);
+           }
+         };
+
+         window.addEventListener('message', handleSync);
+         const iframe = document.querySelector('iframe');
+         iframe?.contentWindow?.postMessage({ type: 'request-html-sync' }, '*');
+       });
+    } catch (e) {
+      console.warn("Failed to sync HTML for legacy print", e);
+    }
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert("Please allow pop-ups to download your presentation PDF.");
@@ -728,7 +917,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             }
           </style>
         </head>
-        <body>${injectedCode}</body>
+        <body>${htmlToPrint}</body>
       </html>
     `);
     printWindow.document.close();
@@ -737,6 +926,72 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
       printWindow.close(); 
     }, 4000);
     setView("ppt-final");
+  };
+
+  const exportToHighFidelityPDF = async () => {
+    if (!generatedCode) return;
+    setIsExporting(true);
+    
+    try {
+      // Request latest HTML from iframe to capture manual contentEditable changes
+      const latestHTML = await new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          window.removeEventListener('message', handleSyncResponse);
+          reject(new Error("Timeout waiting for iframe sync"));
+        }, 3000);
+
+        const handleSyncResponse = (event: MessageEvent) => {
+          if (event.data?.type === 'response-html-sync') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', handleSyncResponse);
+            resolve(event.data.html);
+          }
+        };
+
+        window.addEventListener('message', handleSyncResponse);
+        const iframe = document.querySelector('iframe');
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage({ type: 'request-html-sync' }, '*');
+        } else {
+          clearTimeout(timeout);
+          window.removeEventListener('message', handleSyncResponse);
+          resolve(injectedCode); // Fallback to current state
+        }
+      });
+
+      const response = await fetch('/api/render-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          html: latestHTML,
+          width: pptConfig.ratio === '16:9' ? 1920 : 1080,
+          height: pptConfig.ratio === '16:9' ? 1080 : 1920,
+          theme: isDarkMode ? 'dark' : 'light'
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Export failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const fileName = topic ? topic.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'presentation';
+      a.download = `${fileName}_high_fidelity.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error: any) {
+      console.error("PDF Export Error:", error);
+      alert(`High-fidelity export failed: ${error.message}. Falling back to native print.`);
+      exportToPDF();
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleOpenNewTab = () => {
@@ -850,9 +1105,11 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
   const handleReset = () => {
     setView("dashboard");
     setIsLiked(false);
+    setTopic("");
     setSubtopics([]);
     setActiveSubtopicIndex(0);
     setAiPasteBuffer("");
+    setReferences([]); // Reset references
     setCurrentPrompt("");
     setSlidesData(Array(20).fill(null).map(() => ({ title: "", text: "", mediaUrl: "", mediaType: "none" })));
     setPptConfig({
@@ -1115,145 +1372,158 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
         {view === "dashboard" ? (
           <motion.div
             key="dashboard"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.4 }}
-            className="relative max-w-7xl mx-auto px-6 py-12 lg:py-24"
-          >
-            {/* Header Section */}
-            <header className="mb-20">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="flex items-center gap-2 mb-4"
-              >
-                <div className={`p-1 rounded ${isDarkMode ? 'bg-white text-black' : 'bg-black text-white'}`}>
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <span className={`text-xs font-bold tracking-widest uppercase ${isDarkMode ? 'text-zinc-500' : 'text-gray-500'}`}>
-                  Intelligence Studio
-                </span>
-              </motion.div>
-
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.1 }}
-                className={`text-6xl md:text-8xl font-display font-medium tracking-tight mb-6 ${isDarkMode ? 'text-zinc-100' : 'text-black'}`}
-              >
-                GENIE AI
-              </motion.h1>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className={`flex flex-col md:flex-row md:items-center gap-4 text-xl md:text-2xl ${isDarkMode ? 'text-zinc-500' : 'text-gray-400'}`}
-              >
-                <span className="font-light italic font-serif">POWERED BY</span>
-                <span className={`font-bold tracking-widest text-3xl md:text-4xl underline decoration-[rgba(59,130,246,0.3)] underline-offset-8 decoration-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                  JAY SINGH NAIK
-                </span>
-              </motion.div>
-            </header>
-
-            {/* Apps Grid */}
-            <div className="grid md:grid-cols-2 gap-8 lg:gap-12 content-start">
-              {apps.map((app, index) => (
-                <motion.button
-                  key={app.id}
-                  onClick={() => {
-                    if (app.id === "ppt-maker") {
-                      setGeneratedCode("");
-                      setView("ppt-config");
-                    }
-                  }}
-                  initial={{ opacity: 0, y: 30 }}
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.02 }}
+              transition={{ type: "spring", damping: 25, stiffness: 100 }}
+              className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-16"
+            >
+              {/* Header Section */}
+              <div className="mb-12 md:mb-20 text-center md:text-left">
+                <motion.div
+                  initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.8, delay: 0.3 + index * 0.1 }}
-                  className={`group relative text-left border rounded-3xl p-8 lg:p-12 transition-all duration-500 hover:shadow-2xl flex flex-col justify-between overflow-hidden active:scale-[0.98] ${app.id === 'ppt-maker' ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'} ${isDarkMode ? 'bg-zinc-950 border-zinc-900 shadow-zinc-900/50' : 'bg-white border-gray-100 shadow-gray-200/50'} ${app.borderColor}`}
+                  className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-blue-500/10 text-blue-500"
                 >
-                  <div className={`absolute inset-0 bg-gradient-to-br ${app.color} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
-                  
-                  <div className="relative z-10">
-                    <div className="flex items-start justify-between mb-8">
-                      <div className={`p-4 rounded-2xl shadow-sm border ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-50'}`}>
-                        {app.icon}
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${isDarkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-gray-100 text-gray-500'}`}>
-                        {app.tag}
-                      </span>
-                    </div>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold tracking-[0.2em] uppercase">Intelligence Studio</span>
+                </motion.div>
+
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className={`text-5xl md:text-8xl font-black tracking-tight mb-6 leading-none ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}
+                >
+                  GENIE <span className="text-blue-600 italic">AI</span>
+                </motion.h1>
+                
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className={`flex flex-col md:flex-row md:items-center justify-center md:justify-start gap-4 text-lg md:text-2xl ${isDarkMode ? 'text-zinc-500' : 'text-gray-400'}`}
+                >
+                  <span className="font-light italic">POWERED BY</span>
+                  <span className={`font-black tracking-widest text-2xl md:text-4xl underline decoration-blue-500/30 underline-offset-8 decoration-4 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                    JAY SINGH NAIK
+                  </span>
+                </motion.div>
+              </div>
+
+              {/* Apps Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
+                {apps.map((app, index) => (
+                  <motion.button
+                    key={app.id}
+                    onClick={() => {
+                      if (app.id === "ppt-maker" || app.id === "ieee-maker") {
+                        // Fully reset state before starting new app
+                        setTopic("");
+                        setSubtopics([]);
+                        setActiveSubtopicIndex(0);
+                        setAiPasteBuffer("");
+                        setGeneratedCode("");
+                        setReferences([]); // Reset references
+                        setSlidesData(Array(20).fill(null).map(() => ({ title: "", text: "", mediaUrl: "", mediaType: "none" })));
+                        
+                        setSelectedApp(app.id);
+                        
+                        if (app.id === "ieee-maker") {
+                          setView("ppt-topic-entry");
+                          setIsDarkMode(false); // Force light mode for academic papers
+                        } else {
+                          setView("ppt-config");
+                        }
+                      }
+                    }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 + index * 0.1 }}
+                    className={`group relative text-left border rounded-3xl p-8 md:p-12 transition-all duration-500 hover:shadow-2xl hover:shadow-blue-500/10 active:scale-[0.98] ${
+                      (app.id === 'ppt-maker' || app.id === 'ieee-maker') ? 'cursor-pointer' : 'cursor-not-allowed opacity-80'
+                    } ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-gray-100 shadow-sm'} ${app.borderColor}`}
+                  >
+                    <div className={`absolute inset-0 bg-gradient-to-br ${app.color} opacity-0 group-hover:opacity-20 transition-opacity duration-500`} />
                     
-                    <h3 className={`text-3xl font-display font-semibold mb-4 group-hover:translate-x-1 transition-transform duration-300 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-                      {app.title}
-                    </h3>
-                    
-                    <p className={`leading-relaxed mb-12 max-w-[280px] ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
-                      {app.description}
-                    </p>
-                  </div>
-
-                  <div className={`relative z-10 flex items-center justify-between group/btn pt-12 border-t ${isDarkMode ? 'border-zinc-900' : 'border-gray-50'}`}>
-                    <span className={`text-sm font-semibold tracking-wide transition-colors ${isDarkMode ? 'text-zinc-600 group-hover:text-zinc-400' : 'text-gray-400 group-hover:text-gray-600'}`}>
-                      {app.id === 'ppt-maker' ? 'Get started' : 'Coming soon'}
-                    </span>
-                    <div className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all duration-300 transform group-hover:rotate-45 ${isDarkMode ? 'border-zinc-800 group-hover:border-white group-hover:bg-white group-hover:text-black' : 'border-gray-100 group-hover:border-black group-hover:bg-black group-hover:text-white'}`}>
-                      <ArrowRight className="w-5 h-5" />
-                    </div>
-                  </div>
-                </motion.button>
-              ))}
-            </div>
-
-            {/* Recent Work Section */}
-            {recentWorks.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.6 }}
-                className="mt-24"
-              >
-                <div className="flex items-center gap-3 mb-10">
-                  <RefreshCw className="w-5 h-5 text-blue-500 animate-[spin_4s_linear_infinite]" />
-                  <h2 className={`text-2xl font-display font-bold tracking-tight uppercase ${isDarkMode ? 'text-zinc-400' : 'text-gray-400'}`}>
-                    Recent Creations
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {recentWorks.map((work) => (
-                    <button
-                      key={work.id}
-                      onClick={() => {
-                        setTopic(work.topic);
-                        setGeneratedCode(work.code);
-                        setView("ppt-preview");
-                      }}
-                      className={`group p-6 rounded-3xl border text-left transition-all hover:scale-[1.02] active:scale-95 ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' : 'bg-white border-gray-100 hover:border-blue-100 shadow-sm'}`}
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
-                          <Eye className="w-4 h-4" />
+                    <div className="relative z-10 flex flex-col h-full">
+                      <div className="flex items-start justify-between mb-8">
+                        <div className={`p-4 rounded-xl shadow-sm border ${isDarkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 border-gray-100'}`}>
+                          {app.icon}
                         </div>
-                        <span className="text-[10px] text-gray-500 font-mono">
-                          {new Date(work.timestamp).toLocaleDateString()}
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-widest uppercase ${isDarkMode ? 'bg-zinc-800 text-zinc-500' : 'bg-gray-100 text-gray-500'}`}>
+                          {app.tag}
                         </span>
                       </div>
-                      <h4 className={`text-lg font-bold line-clamp-1 mb-2 ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                        {work.topic}
-                      </h4>
-                      <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
-                        A synthesized website experience based on AI models.
+                      
+                      <h3 className={`text-3xl font-black mb-4 group-hover:translate-x-1 transition-transform duration-300 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                        {app.title}
+                      </h3>
+                      
+                      <p className={`text-base leading-relaxed mb-12 max-w-sm ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        {app.description}
                       </p>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
 
+                      <div className={`mt-auto flex items-center justify-between group/btn pt-8 border-t ${isDarkMode ? 'border-zinc-800' : 'border-gray-100'}`}>
+                        <span className={`text-sm font-bold tracking-wide transition-colors ${isDarkMode ? 'text-zinc-600 group-hover:text-zinc-400' : 'text-gray-400 group-hover:text-zinc-900'}`}>
+                          {(app.id === 'ppt-maker' || app.id === 'ieee-maker') ? 'Launch Studio' : 'Coming soon'}
+                        </span>
+                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full border flex items-center justify-center transition-all duration-300 transform group-hover:rotate-45 ${isDarkMode ? 'border-zinc-800 group-hover:border-white group-hover:bg-white group-hover:text-black' : 'border-gray-200 group-hover:border-black group-hover:bg-black group-hover:text-white'}`}>
+                          <ArrowRight className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+
+              {/* Recent Work Section */}
+              {recentWorks.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6 }}
+                  className="mt-20 md:mt-32"
+                >
+                  <div className="flex items-center gap-3 mb-8 md:mb-12">
+                    <div className="p-2 rounded-lg bg-blue-500/10">
+                      <RefreshCw className="w-5 h-5 text-blue-500 animate-spin-slow" />
+                    </div>
+                    <h2 className={`text-xl md:text-2xl font-black tracking-tight ${isDarkMode ? 'text-zinc-400' : 'text-gray-400'}`}>
+                      RECENT CREATIONS
+                    </h2>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {recentWorks.map((work) => (
+                      <button
+                        key={work.id}
+                        onClick={() => {
+                          setTopic(work.topic);
+                          setGeneratedCode(work.code);
+                          setView("ppt-preview");
+                        }}
+                        className={`group p-6 rounded-3xl border text-left transition-all hover:scale-[1.02] active:scale-95 ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800 hover:border-zinc-700' : 'bg-white border-gray-100 hover:border-blue-200 shadow-sm'}`}
+                      >
+                        <div className="flex items-center justify-between mb-4">
+                          <div className={`p-2 rounded-xl border ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-500'}`}>
+                            <Eye className="w-4 h-4" />
+                          </div>
+                          <span className="text-[10px] text-gray-500 font-bold opacity-70">
+                            {new Date(work.timestamp).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <h4 className={`text-lg font-bold truncate mb-2 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                          {work.topic}
+                        </h4>
+                        <p className={`text-xs line-clamp-2 leading-relaxed h-8 ${isDarkMode ? 'text-zinc-500' : 'text-gray-500'}`}>
+                          Full synthesized experience captured as high-fidelity output.
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             <footer className={`mt-20 pt-12 border-t flex flex-col md:flex-row justify-between items-center gap-6 ${isDarkMode ? 'border-zinc-900' : 'border-gray-100'}`}>
               <p className="text-sm text-gray-400">
                 © 2026 Genie AI Studio. All rights reserved.
@@ -1270,126 +1540,160 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
         ) : view === "ppt-config" ? (
           <motion.div
             key="ppt-config"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.4 }}
-            className="relative max-w-4xl mx-auto px-6 py-12 lg:py-24"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-16"
           >
             <button
               onClick={() => setView("dashboard")}
-              className={`flex items-center gap-2 transition-colors mb-12 group ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
+              className={`flex items-center gap-2 transition-all mb-8 md:mb-12 group ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-zinc-900'}`}
             >
-              <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
-              <span className="font-medium">Back to dashboard</span>
+              <div className={`p-1.5 rounded-lg border transition-colors ${isDarkMode ? 'border-zinc-800 group-hover:bg-zinc-800' : 'border-gray-100 group-hover:bg-gray-50'}`}>
+                <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+              </div>
+              <span className="text-sm font-bold tracking-tight uppercase">Dashboard</span>
             </button>
 
-            <header className="mb-16">
-              <h2 className={`text-5xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                Configuration
+            <header className="mb-12 md:mb-16">
+              <h2 className={`text-4xl md:text-6xl font-black mb-4 tracking-tight ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                Configure <span className="text-blue-600 italic">{selectedApp === 'ieee-maker' ? 'Manuscript' : 'Synthesis'}</span>
               </h2>
-              <p className="text-gray-400 text-xl font-light">
-                Tailor your presentation parameters before we generate the magic.
+              <p className={`text-base md:text-xl font-medium leading-relaxed max-w-2xl ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
+                Tailor your {selectedApp === 'ieee-maker' ? 'document' : 'presentation'} parameters. Our engine adapts the synthesis to your specific structural needs.
               </p>
             </header>
 
             <div className="space-y-12">
-              {/* Ratio Selection */}
-              <section>
-                <div className="flex items-center gap-3 mb-6">
-                  <Layout className="w-5 h-5 text-blue-500" />
-                  <h3 className="font-semibold text-lg">Aspect Ratio</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: "16:9", sub: "Widescreen", icon: <Presentation className="w-6 h-6" /> },
-                    { label: "9:16", sub: "Vertical / Mobile", icon: <Presentation className="w-6 h-6 rotate-90" /> }
-                  ].map((r) => (
-                    <button
-                      key={r.label}
-                      onClick={() => setPptConfig(prev => ({ ...prev, ratio: r.label }))}
-                      className={`flex flex-col items-center justify-center p-8 rounded-3xl border-2 transition-all duration-300 ${pptConfig.ratio === r.label ? (isDarkMode ? 'border-white bg-zinc-800 shadow-xl shadow-white/5' : 'border-black bg-white shadow-xl') : (isDarkMode ? 'border-zinc-800 bg-zinc-900/50 text-zinc-600' : 'border-gray-100 bg-[rgba(255,255,255,0.5)] text-gray-400 opacity-60 hover:opacity-100')}`}
-                    >
-                      <div className="mb-3">{r.icon}</div>
-                      <span className="font-bold text-xl mb-1">{r.label}</span>
-                      <span className="text-xs uppercase tracking-widest opacity-60">{r.sub}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              {/* Theme Selection */}
-              <section>
-                <div className="flex items-center gap-3 mb-6">
-                  <Moon className="w-5 h-5 text-indigo-500" />
-                  <h3 className="font-semibold text-lg">Visual Theme</h3>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  {[
-                    { id: "light", label: "Light", icon: <Sun className="w-5 h-5" /> },
-                    { id: "dark", label: "Dark", icon: <Moon className="w-5 h-5" /> }
-                  ].map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setPptConfig(prev => ({ ...prev, theme: t.id }))}
-                      className={`flex items-center gap-4 p-6 rounded-2xl border-2 transition-all duration-300 ${pptConfig.theme === t.id ? (isDarkMode ? 'border-white bg-zinc-800 shadow-lg shadow-white/5' : 'border-black bg-white shadow-lg') : (isDarkMode ? 'border-zinc-800 bg-zinc-900/50 text-zinc-600' : 'border-gray-100 bg-[rgba(255,255,255,0.5)] text-gray-400')}`}
-                    >
-                      <div className={`p-2 rounded-lg ${pptConfig.theme === t.id ? (isDarkMode ? 'bg-white text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-zinc-800' : 'bg-gray-100')}`}>
-                        {t.icon}
+              {selectedApp !== 'ieee-maker' && (
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="md:col-span-1 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-500/10">
+                        <Layout className="w-5 h-5 text-blue-500" />
                       </div>
-                      <span className="font-bold">{t.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </section>
+                      <h3 className={`font-black text-sm uppercase tracking-widest ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>Aspect Ratio</h3>
+                    </div>
+                    <p className="text-xs text-gray-400">Select the canvas geometry for your final artifact.</p>
+                  </div>
+                  <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                    {[
+                      { label: "16:9", sub: "Desktop", icon: <Presentation className="w-5 h-5" /> },
+                      { label: "9:16", sub: "Mobile", icon: <Presentation className="w-5 h-5 rotate-90" /> }
+                    ].map((r) => (
+                      <button
+                        key={r.label}
+                        onClick={() => setPptConfig(prev => ({ ...prev, ratio: r.label }))}
+                        className={`flex flex-col items-center justify-center p-6 md:p-8 rounded-3xl border-2 transition-all duration-300 ${pptConfig.ratio === r.label ? (isDarkMode ? 'border-blue-500 bg-blue-500/10 shadow-xl shadow-blue-500/10 text-white' : 'border-blue-600 bg-blue-50 shadow-xl shadow-blue-600/10 text-blue-700') : (isDarkMode ? 'border-zinc-800 bg-zinc-900/50 text-zinc-600 hover:border-zinc-700' : 'border-gray-100 bg-gray-50/50 text-gray-400 hover:border-gray-200')}`}
+                      >
+                        <div className="mb-4 p-3 rounded-2xl bg-current opacity-10 flex items-center justify-center">
+                          {r.icon}
+                        </div>
+                        <span className="font-black text-2xl mb-1">{r.label}</span>
+                        <span className="text-[10px] uppercase font-bold tracking-[0.2em] opacity-60">{r.sub}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-              {/* Slides Configuration */}
-              <section>
-                <div className="flex items-center gap-3 mb-6">
-                  <Hash className="w-5 h-5 text-orange-500" />
-                  <h3 className="font-semibold text-lg">Number of Slides</h3>
-                </div>
-                <div className={`flex items-center gap-6 p-4 border rounded-2xl transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
-                  <input
-                    type="range"
-                    min="1"
-                    max="20"
-                    value={pptConfig.slides}
-                    onChange={(e) => setPptConfig(prev => ({ ...prev, slides: parseInt(e.target.value) }))}
-                    className={`flex-1 h-2 rounded-lg appearance-none cursor-pointer ${isDarkMode ? 'accent-white bg-zinc-800' : 'accent-black bg-gray-100'}`}
-                  />
-                  <span className={`text-3xl font-display font-bold w-12 text-center ${isDarkMode ? 'text-white' : 'text-black'}`}>{pptConfig.slides}</span>
-                </div>
-              </section>
+              {selectedApp !== 'ieee-maker' && (
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-12 border-t border-gray-100 dark:border-zinc-900">
+                  <div className="md:col-span-1 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-indigo-500/10">
+                        <Palette className="w-5 h-5 text-indigo-500" />
+                      </div>
+                      <h3 className={`font-black text-sm uppercase tracking-widest ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>Visual Theme</h3>
+                    </div>
+                    <p className="text-xs text-gray-400">Determines the core accessibility and mood palette.</p>
+                  </div>
+                  <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                    {[
+                      { id: "light", label: "Light", icon: <Sun className="w-4 h-4" /> },
+                      { id: "dark", label: "Dark", icon: <Moon className="w-4 h-4" /> }
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setPptConfig(prev => ({ ...prev, theme: t.id }))}
+                        className={`flex items-center gap-4 p-5 rounded-2xl border-2 transition-all duration-300 ${pptConfig.theme === t.id ? (isDarkMode ? 'border-white bg-zinc-800 text-white' : 'border-zinc-900 bg-white text-zinc-900 shadow-lg shadow-zinc-900/10') : (isDarkMode ? 'border-zinc-800 bg-zinc-900/50 text-zinc-600 hover:border-zinc-700' : 'border-gray-100 bg-gray-50/50 text-gray-400 hover:border-gray-200')}`}
+                      >
+                        <div className={`p-2 rounded-lg ${pptConfig.theme === t.id ? (isDarkMode ? 'bg-white text-black' : 'bg-black text-white') : (isDarkMode ? 'bg-zinc-800' : 'bg-gray-100')}`}>
+                          {t.icon}
+                        </div>
+                        <span className="font-black text-sm uppercase tracking-widest">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
-              {/* Final Proceed Button */}
+              {selectedApp !== 'ieee-maker' && (
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-12 border-t border-gray-100 dark:border-zinc-900">
+                  <div className="md:col-span-1 space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-orange-500/10">
+                        <Hash className="w-5 h-5 text-orange-500" />
+                      </div>
+                      <h3 className={`font-black text-sm uppercase tracking-widest ${isDarkMode ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                        {selectedApp === 'ieee-maker' ? 'Section Count' : 'Volume'}
+                      </h3>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      {selectedApp === 'ieee-maker' ? 'Define the depth of your research manuscript.' : 'Control the total synthesis scope of the presentation.'}
+                    </p>
+                  </div>
+                  <div className="md:col-span-2 flex items-center gap-4 md:gap-8 p-6 rounded-3xl border transition-all ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800 shadow-inner' : 'bg-gray-50 border-gray-100 shadow-inner'} h-24 md:h-28">
+                    <div className="flex-1 space-y-4">
+                      <input
+                        type="range"
+                        min="1"
+                        max="20"
+                        value={pptConfig.slides}
+                        onChange={(e) => setPptConfig(prev => ({ ...prev, slides: parseInt(e.target.value) }))}
+                        className={`w-full h-1.5 rounded-lg appearance-none cursor-pointer transition-all ${isDarkMode ? 'accent-white bg-zinc-800' : 'accent-zinc-900 bg-gray-300'}`}
+                      />
+                      <div className="flex justify-between text-[10px] font-black tracking-widest text-gray-400 uppercase">
+                        <span>1 {selectedApp === 'ieee-maker' ? 'Section' : 'Slide'}</span>
+                        <span>20 {selectedApp === 'ieee-maker' ? 'Sections' : 'Slides'}</span>
+                      </div>
+                    </div>
+                    <div className={`w-20 h-16 md:w-24 md:h-20 rounded-2xl flex items-center justify-center bg-white shadow-lg border-2 ${isDarkMode ? 'border-white bg-zinc-950' : 'border-zinc-900 bg-white'}`}>
+                      <span className={`text-3xl md:text-4xl font-black ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>{pptConfig.slides}</span>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               <motion.section
                 initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="pt-12 border-t border-gray-200"
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="pt-16 md:pt-20"
               >
-                <div className="text-center mb-8">
-                  <h3 className={`text-2xl font-display font-medium mb-2 ${isDarkMode ? 'text-white' : 'text-black'}`}>Ready to generate?</h3>
-                  <p className="text-gray-400">Our engine will help you create a professional presentation structure automatically.</p>
+                <div className="text-center mb-10 md:mb-12">
+                  <p className={`text-sm md:text-base font-medium max-w-lg mx-auto ${isDarkMode ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Finalize your configuration to initiate the synthesis. GENIE AI will create a coherent logical structure for your {selectedApp === 'ieee-maker' ? 'manuscript' : 'presentation'}.
+                  </p>
                 </div>
                 
                 <button
                   onClick={handleContentTypeSelect}
-                  className={`w-full group p-8 rounded-3xl border-2 transition-all duration-300 flex items-center justify-between overflow-hidden hover:scale-[1.02] shadow-2xl ${isDarkMode ? 'border-white bg-white text-black shadow-white/5' : 'border-black bg-black text-white shadow-black/10'}`}
+                  className={`w-full group p-6 md:p-10 rounded-[2.5rem] border-2 transition-all duration-500 flex flex-col md:flex-row items-center justify-between gap-6 overflow-hidden hover:scale-[1.02] active:scale-95 shadow-2xl ${isDarkMode ? 'border-white bg-white text-black shadow-white/5' : 'border-zinc-900 bg-zinc-900 text-white shadow-black/20'}`}
                 >
-                  <div className="flex items-center gap-6">
-                    <div className={`p-4 backdrop-blur-md rounded-2xl ${isDarkMode ? 'bg-black/10' : 'bg-white/20'}`}>
-                      <Wand2 className={`w-8 h-8 ${isDarkMode ? 'text-black' : 'text-white'}`} />
+                  <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8 text-center md:text-left">
+                    <div className={`p-5 rounded-3xl transition-all group-hover:scale-110 group-hover:rotate-6 ${isDarkMode ? 'bg-zinc-100' : 'bg-white/10'}`}>
+                      <Wand2 className={`w-8 h-8 md:w-10 md:h-10 ${isDarkMode ? 'text-blue-600' : 'text-blue-400'}`} />
                     </div>
-                    <div className="text-left">
-                      <h4 className="text-2xl font-bold mb-1">Create with AI</h4>
-                      <p className={`text-sm leading-relaxed max-w-sm ${isDarkMode ? 'text-zinc-600' : 'text-gray-400'}`}>
-                        Enter a topic and let GENIE AI generate structured content and themes for you.
+                    <div className="space-y-1">
+                      <h4 className="text-2xl md:text-3xl font-black">Synthesize with AI</h4>
+                      <p className={`text-sm leading-relaxed max-w-sm ${isDarkMode ? 'text-zinc-500' : 'text-white/40'}`}>
+                        Unlock automated content generation with high-fidelity formatting.
                       </p>
                     </div>
                   </div>
-                  <div className={`flex items-center justify-center w-12 h-12 rounded-full transition-all ${isDarkMode ? 'bg-black/10 group-hover:bg-black/20' : 'bg-white/10 group-hover:bg-white/20'}`}>
-                    <ArrowRight className="w-6 h-6" />
+                  <div className={`flex items-center justify-center w-14 h-14 md:w-16 md:h-16 rounded-full transition-all group-hover:translate-x-2 ${isDarkMode ? 'bg-zinc-100' : 'bg-white/10'}`}>
+                    <ArrowRight className="w-6 h-6 md:w-8 md:h-8" />
                   </div>
                 </button>
               </motion.section>
@@ -1398,102 +1702,147 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
         ) : view === "ppt-topic-entry" ? (
           <motion.div
             key="ppt-topic-entry"
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="relative max-w-2xl mx-auto px-6 py-24 text-center"
+            exit={{ opacity: 0, scale: 0.98 }}
+            className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-16"
           >
             <button
-              onClick={() => setView("ppt-config")}
-              className={`flex items-center gap-2 transition-colors mb-12 group mx-auto ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
+              onClick={() => setView(selectedApp === 'ieee-maker' ? "dashboard" : "ppt-config")}
+              className={`flex items-center gap-2 transition-all mb-8 group ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-zinc-900'}`}
             >
-              <ChevronLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
-              <span className="font-medium">Back to config</span>
+              <div className={`p-1.5 rounded-lg border transition-colors ${isDarkMode ? 'border-zinc-800 group-hover:bg-zinc-800' : 'border-gray-100 group-hover:bg-gray-50'}`}>
+                <ChevronLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+              </div>
+              <span className="text-sm font-bold tracking-tight uppercase">Configuration</span>
             </button>
 
-            <header className="mb-12">
-              <div className="w-20 h-20 bg-blue-500 text-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-[rgba(59,130,246,0.3)]">
-                <Wand2 className="w-10 h-10" />
-              </div>
-              <h2 className={`text-4xl font-display font-medium mb-4 ${isDarkMode ? 'text-white' : 'text-black'}`}>What's the topic?</h2>
-              <p className="text-gray-500 text-lg">Tell us what your presentation is about, and we will generate the content</p>
-            </header>
-
-            <form onSubmit={handleTopicSubmit} className="space-y-8">
-              <div className="relative group">
-                <textarea
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="e.g. The impact of blockchain on global supply chains..."
-                  className={`w-full h-32 p-6 text-xl border rounded-3xl focus:outline-none focus:ring-4 transition-all resize-none shadow-sm ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-white focus:ring-white/5 focus:border-zinc-700' : 'bg-white border-gray-100 focus:ring-blue-50 focus:border-blue-200'}`}
-                />
-              </div>
-
-              {/* File Upload Section */}
-              <div className="space-y-4 text-left">
-                <div className="flex items-center justify-between">
-                  <h4 className={`text-sm font-bold uppercase tracking-widest ${isDarkMode ? 'text-zinc-500' : 'text-gray-400'}`}>
-                    Knowledge Base (RAG)
-                  </h4>
-                  <span className="text-[10px] bg-blue-500/10 text-blue-500 px-2 py-1 rounded-md font-bold underline cursor-help" title="Augment generation with your own documents, images, and data">What is this?</span>
-                </div>
-                
-                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4`}>
-                  <label className={`relative flex flex-col items-center justify-center p-6 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${isDarkMode ? 'border-zinc-800 hover:border-zinc-600 bg-zinc-900/50 hover:bg-zinc-900' : 'border-gray-200 hover:border-blue-300 bg-white hover:bg-blue-50/30'}`}>
-                    <Upload className="w-8 h-8 text-blue-500 mb-2" />
-                    <span className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>Upload Files</span>
-                    <span className="text-[10px] text-gray-500 mt-1">PDF, Excel, Images, Video</span>
-                    <input type="file" multiple className="hidden" onChange={handleFileSelect} />
-                  </label>
-
-                  <div className={`flex flex-col gap-2 max-h-[140px] overflow-y-auto p-2 rounded-2xl transition-all ${isDarkMode ? 'bg-zinc-900/30' : 'bg-gray-50/50'} ${isIndexing ? 'opacity-50 grayscale' : ''}`}>
-                    {isIndexing && (
-                      <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/5 rounded-2xl backdrop-blur-[1px]">
-                         <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 px-4 py-2 rounded-full shadow-lg border border-blue-500/30">
-                           <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
-                           <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">Indexing Data...</span>
-                         </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
+              <div className="lg:col-span-7 lg:pr-8 space-y-10">
+                {/* Configuration Section for IEEE Maker moved here */}
+                {selectedApp === 'ieee-maker' && (
+                  <div className="p-8 rounded-3xl border border-gray-100 bg-white shadow-xl shadow-gray-200/20 mb-8">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 rounded-lg bg-orange-500/10">
+                        <Hash className="w-5 h-5 text-orange-500" />
                       </div>
-                    )}
-                    {uploadedFiles.length === 0 ? (
-                      <div className="flex-1 flex flex-col items-center justify-center text-gray-400 opacity-50 italic text-[10px] py-8">
-                        <Paperclip className="w-5 h-5 mb-1" />
-                        No files attached
+                      <h3 className="font-black text-sm uppercase tracking-widest text-zinc-700">Section Count</h3>
+                      <div className="ml-auto w-16 h-12 rounded-xl flex items-center justify-center bg-white shadow-md border-2 border-zinc-900">
+                        <span className="text-2xl font-black text-zinc-900 leading-none">{pptConfig.slides}</span>
                       </div>
-                    ) : (
-                      uploadedFiles.map(file => (
-                        <div key={file.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-100 shadow-sm'}`}>
-                          <div className="flex items-center gap-3 overflow-hidden">
-                            <div className="p-1.5 bg-blue-500/10 rounded-lg shrink-0">
-                              <File className="w-3.5 h-3.5 text-blue-500" />
-                            </div>
-                            <div className="overflow-hidden">
-                              <p className={`text-[10px] font-bold truncate ${isDarkMode ? 'text-white' : 'text-black'}`}>{file.name}</p>
-                              <p className="text-[8px] text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
-                            </div>
-                          </div>
-                          <button 
-                            type="button" 
-                            onClick={() => removeFile(file.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <input 
+                        type="range" 
+                        min="1" 
+                        max="20" 
+                        value={pptConfig.slides}
+                        onChange={(e) => setPptConfig(prev => ({ ...prev, slides: parseInt(e.target.value) }))}
+                        className="w-full h-1.5 rounded-lg appearance-none cursor-pointer accent-zinc-900 bg-gray-200"
+                      />
+                      <div className="flex justify-between text-[10px] font-black tracking-widest text-gray-400 uppercase">
+                        <span>1 SECTION</span>
+                        <span>20 SECTIONS</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-4 italic">Higher section counts will generate a more comprehensive research manuscript.</p>
+                  </div>
+                )}
+
+                <header>
+                  <div className={`w-14 h-14 mb-6 rounded-2xl flex items-center justify-center ${isDarkMode ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-600 text-white shadow-xl shadow-blue-600/20'}`}>
+                    <Wand2 className="w-8 h-8" />
+                  </div>
+                  <h2 className={`text-4xl md:text-5xl font-black mb-4 tracking-tight leading-tight transition-all ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>
+                    {selectedApp === 'ieee-maker' ? 'Scientific' : "What's the"} <span className="text-blue-600 italic">{selectedApp === 'ieee-maker' ? 'Manuscript' : 'Mission?'}</span>
+                  </h2>
+                  <p className={`text-base md:text-lg font-medium leading-relaxed ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    {selectedApp === 'ieee-maker' 
+                      ? 'Submit your research hypothesis. Our AI will architect a publication-grade outline following IEEE standards.'
+                      : 'Define your research topic. Our AI will analyze the conceptual depth and prepare the subtopic architecture.'}
+                  </p>
+                </header>
+                <form onSubmit={handleTopicSubmit} className="space-y-8">
+                  <div className="relative group">
+                    <textarea
+                      value={topic}
+                      autoFocus
+                      onChange={(e) => setTopic(e.target.value)}
+                      placeholder="e.g. The impact of blockchain on global supply chains..."
+                      className={`relative w-full h-40 md:h-52 p-6 md:p-8 rounded-2xl text-lg md:text-2xl font-bold bg-transparent border-2 outline-none transition-all resize-none shadow-2xl ${isDarkMode ? 'border-zinc-800 text-white placeholder-zinc-700 bg-zinc-900/50 focus:border-zinc-700' : 'border-gray-200 text-zinc-900 placeholder-gray-300 bg-white focus:border-blue-500 shadow-gray-200/50 outline-none'}`}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={!topic.trim()}
+                    className={`w-full py-5 md:py-6 rounded-2xl font-black text-lg md:text-xl transition-all flex items-center justify-center gap-4 shadow-2xl disabled:opacity-50 hover:scale-[1.01] active:scale-95 ${isDarkMode ? 'bg-white text-black shadow-white/10' : 'bg-zinc-900 text-white shadow-black/20'}`}
+                  >
+                    <span>ANALYZE TOPIC</span>
+                    <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+                </form>
+              </div>
+
+              <div className="lg:col-span-5">
+                <div className={`p-6 md:p-8 rounded-[2rem] border min-h-full ${isDarkMode ? 'bg-zinc-900/50 border-zinc-800 shadow-inner' : 'bg-white border-gray-100 shadow-xl shadow-gray-200/40'}`}>
+                  <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
+                        <Paperclip className="w-4 h-4" />
+                      </div>
+                      <h4 className={`text-sm font-black uppercase tracking-[0.2em] ${isDarkMode ? 'text-zinc-400' : 'text-zinc-700'}`}>
+                        Knowledge Base
+                      </h4>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <label className={`group relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-3xl cursor-pointer transition-all ${isDarkMode ? 'border-zinc-800 hover:border-zinc-600 bg-zinc-950/50 hover:bg-zinc-950' : 'border-gray-200 hover:border-blue-400 bg-gray-50/50 hover:bg-blue-50/50 shadow-inner'}`}>
+                      <Upload className="w-8 h-8 text-blue-500 mb-2 transition-transform group-hover:-translate-y-1" />
+                      <span className={`text-sm font-black ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>Import Assets</span>
+                      <p className="text-[10px] text-gray-500 mt-2 text-center uppercase tracking-widest leading-relaxed">
+                        PDF, Images or References
+                      </p>
+                      <input type="file" multiple className="hidden" onChange={handleFileSelect} />
+                    </label>
+
+                    <div className={`space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar ${isIndexing ? 'opacity-50 grayscale' : ''}`}>
+                      {isIndexing && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/5 rounded-2xl backdrop-blur-[1px]">
+                           <div className="flex items-center gap-2 bg-white dark:bg-zinc-800 px-4 py-2 rounded-full shadow-lg border border-blue-500/30">
+                             <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                             <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tighter">Indexing...</span>
+                           </div>
                         </div>
-                      ))
-                    )}
+                      )}
+                      {uploadedFiles.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-10 opacity-30">
+                          <File className="w-6 h-6 mb-2" />
+                          <p className="text-[10px] font-black uppercase tracking-widest leading-tight">No files detected</p>
+                        </div>
+                      ) : (
+                        uploadedFiles.map(file => (
+                          <div key={file.id} className={`flex items-center justify-between p-3 rounded-xl border transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100 shadow-sm'}`}>
+                            <div className="flex items-center gap-3 overflow-hidden">
+                              <File className="w-3.5 h-3.5 text-blue-500" />
+                              <div className="overflow-hidden">
+                                <p className="text-[10px] font-bold truncate dark:text-white leading-tight">{file.name}</p>
+                                <p className="text-[8px] text-gray-500 uppercase tracking-tighter">{(file.size / 1024).toFixed(1)} KB</p>
+                              </div>
+                            </div>
+                            <button onClick={() => removeFile(file.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1.5">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-
-              <button
-                type="submit"
-                disabled={!topic.trim()}
-                className={`w-full py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
-              >
-                Create Prompt <ArrowRight className="w-5 h-5" />
-              </button>
-            </form>
+            </div>
           </motion.div>
         ) : view === "ppt-structure-entry" || view === "ppt-subtopic-entry" ? (
           <motion.div
@@ -1513,7 +1862,9 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 </div>
 
                 <h3 className={`text-2xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>
-                  {view === "ppt-structure-entry" ? 'Generate Structure' : `Defining ${subtopics[activeSubtopicIndex]}`}
+                  {view === "ppt-structure-entry" 
+                    ? (selectedApp === 'ieee-maker' ? 'Construct Paper Outline' : 'Generate Structure')
+                    : (selectedApp === 'ieee-maker' ? `Drafting Section: ${subtopics[activeSubtopicIndex]}` : `Defining ${subtopics[activeSubtopicIndex]}`)}
                 </h3>
                 
                 <div className={`border rounded-2xl p-6 mb-8 relative group transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-100'}`}>
@@ -1594,8 +1945,12 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
               <div className={`inline-flex items-center gap-2 px-6 py-2 rounded-full text-xs font-bold uppercase tracking-widest mb-6 ${isDarkMode ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-50 text-emerald-600'}`}>
                 <CheckCircle2 className="w-4 h-4" /> Content Compilation Complete
               </div>
-              <h2 className={`text-7xl md:text-8xl font-display font-bold mb-8 ${isDarkMode ? 'text-white' : 'text-black'}`}>Review Final Content</h2>
-              <p className="text-gray-400 text-xl font-light">Here is the summarized structure for your presentation.</p>
+              <h2 className={`text-7xl md:text-8xl font-display font-bold mb-8 ${isDarkMode ? 'text-white' : 'text-black'}`}>
+                {selectedApp === 'ieee-maker' ? 'Review Manuscript Blueprint' : 'Review Final Content'}
+              </h2>
+              <p className="text-gray-400 text-xl font-light">
+                {selectedApp === 'ieee-maker' ? 'The drafted content for your academic paper.' : 'Here is the summarized structure for your presentation.'}
+              </p>
             </header>
 
             <div className="space-y-6 mb-20">
@@ -1623,7 +1978,7 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
                 onClick={generateFinalPrompt}
                 className={`py-6 px-20 border rounded-full font-bold text-xl transition-all hover:scale-105 active:scale-95 shadow-2xl ${isDarkMode ? 'bg-white text-black border-white shadow-white/5' : 'bg-black text-white border-black shadow-black/20'}`}
               >
-                Create Presentation Prompt
+                {selectedApp === 'ieee-maker' ? 'Create Final Manuscript' : 'Create Presentation Prompt'}
               </button>
               
               <button 
@@ -1751,65 +2106,69 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={`min-h-screen py-12 px-4 transition-colors ${isDarkMode ? 'bg-zinc-950' : 'bg-gray-50'}`}
+            className={`min-h-screen py-8 md:py-12 px-4 transition-colors ${isDarkMode ? 'bg-zinc-950' : 'bg-gray-50'}`}
           >
-            <div className="max-w-6xl mx-auto">
-              <header className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12">
-                <div className="flex items-center gap-4">
+            <div className="max-w-7xl mx-auto">
+              <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
+                <div className="flex items-center gap-5">
                   <button
                     onClick={() => setView("dashboard")}
-                    className={`p-3 border rounded-2xl transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-white' : 'bg-white border-gray-100 text-gray-400 hover:text-black'}`}
+                    className={`p-3 border rounded-2xl transition-all hover:scale-105 active:scale-95 ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white' : 'bg-white border-gray-100 text-gray-400 hover:text-black shadow-sm'}`}
                   >
-                    <ChevronLeft className="w-6 h-6" />
+                    <ChevronLeft className="w-6 h-6 md:w-8 md:h-8" />
                   </button>
-                  <div>
-                    <h2 className={`text-4xl font-display font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>Website Preview</h2>
-                    <p className="text-gray-400">Review your presentation as a modern landing page.</p>
+                  <div className="space-y-1">
+                    <h2 className={`text-3xl md:text-5xl font-black tracking-tight ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>Artifact Synthesis</h2>
+                    <p className="text-sm md:text-lg font-medium text-gray-400">Review and finalize your cross-device compatible presentation.</p>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-4">
+                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                   {!generatedCode ? (
-                    <>
-                    <button
-                      onClick={() => setIsLiked(!isLiked)}
-                      className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all ${isLiked ? 'bg-pink-500 text-white shadow-lg shadow-pink-200' : (isDarkMode ? 'bg-zinc-800 text-zinc-500 border border-zinc-700 hover:text-pink-400 hover:border-pink-500/30' : 'bg-white text-gray-400 border border-gray-100 hover:border-pink-200 hover:text-pink-500')}`}
-                    >
-                      <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
-                      {isLiked ? "Liked!" : "Like Logic"}
-                    </button>
+                    <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+                      <button
+                        onClick={() => setIsLiked(!isLiked)}
+                        className={`flex-1 lg:flex-none flex items-center justify-center gap-2 py-4 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${isLiked ? 'bg-pink-500 text-white shadow-xl shadow-pink-500/20' : (isDarkMode ? 'bg-zinc-900 text-zinc-500 border border-zinc-800 hover:text-pink-400 hover:border-pink-500/30' : 'bg-white text-gray-400 border border-gray-100 hover:border-pink-200 hover:text-pink-500 shadow-sm')}`}
+                      >
+                        <Heart className={`w-4 h-4 ${isLiked ? 'fill-current' : ''}`} />
+                        {isLiked ? "Saved" : "Save Logic"}
+                      </button>
 
-                    <button
-                      onClick={exportToPDF}
-                      className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
-                    >
-                      <Download className="w-5 h-5" />
-                      Download PDF
-                    </button>
+                      <button
+                        onClick={exportToPDF}
+                        disabled={isExporting}
+                        className={`flex-1 lg:flex-none flex items-center justify-center gap-3 py-4 px-8 rounded-2xl font-black text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-2xl ${isDarkMode ? 'bg-white text-black shadow-white/10' : 'bg-zinc-900 text-white shadow-black/20'}`}
+                      >
+                        {isExporting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        {isExporting ? "Processing..." : "Download as PDF"}
+                      </button>
 
-                    <button
-                      onClick={downloadNotes}
-                      className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-blue-400 hover:bg-zinc-700' : 'bg-white text-blue-600 border-blue-100 hover:bg-blue-50'}`}
-                    >
-                      <FileText className="w-5 h-5" />
-                      Notes PDF
-                    </button>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={downloadNotes}
+                          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 border py-4 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-blue-400 hover:bg-zinc-800' : 'bg-white text-blue-600 border-blue-50 hover:bg-blue-50/50 shadow-sm'}`}
+                        >
+                          <FileText className="w-4 h-4" />
+                          Notes
+                        </button>
 
-                    <button
-                      onClick={handleFinalizePPTX}
-                      className={`flex items-center gap-2 border py-4 px-8 rounded-2xl font-bold transition-all ${isDarkMode ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-200 hover:text-black'}`}
-                    >
-                      <FileOutput className="w-5 h-5" />
-                      PPTX
-                    </button>
-                    </>
+                        <button
+                          onClick={handleFinalizePPTX}
+                          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 border py-4 px-6 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${isDarkMode ? 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white' : 'bg-white text-gray-400 border border-gray-100 hover:border-gray-200 hover:text-black shadow-sm'}`}
+                        >
+                          <FileOutput className="w-4 h-4" />
+                          PPTX
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <button
-                      onClick={exportToPDF}
-                      className={`flex items-center gap-2 py-4 px-8 rounded-2xl font-bold transition-all hover:scale-105 active:scale-95 shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
+                      onClick={exportToHighFidelityPDF}
+                      disabled={isExporting}
+                      className={`w-full lg:w-auto flex items-center justify-center gap-3 py-4 md:py-5 px-8 md:px-12 rounded-[2rem] font-black text-sm uppercase tracking-[0.2em] transition-all hover:scale-105 active:scale-95 shadow-2xl disabled:opacity-50 ${isDarkMode ? 'bg-white text-black shadow-white/10' : 'bg-zinc-900 text-white shadow-black/20'}`}
                     >
-                      <Download className="w-5 h-5" />
-                      Download Artifact
+                      {isExporting ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                      {isExporting ? "Processing Synthesis..." : "Download as PDF"}
                     </button>
                   )}
                 </div>
@@ -1952,42 +2311,46 @@ IMPORTANT: Make sure that the PDF download functionality is fully working at the
             </div>
 
             <h2 className={`text-6xl font-display font-bold mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>
-              {isGenerating ? "Synthesizing..." : "Presentation Ready!"}
+              {isGenerating ? "Synthesizing..." : (selectedApp === 'ieee-maker' ? "Manuscript Ready!" : "Presentation Ready!")}
             </h2>
             <p className={`text-xl font-light mb-12 max-w-md mx-auto ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>
               {isGenerating 
-                ? "Our AI engine is compiling your content, optimizing layouts, and generating a high-fidelity PDF document."
-                : "Your PDF presentation has been generated and the download should start automatically."}
+                ? (selectedApp === 'ieee-maker' ? "Our AI engine is compiling your manuscript, formatting columns, and generating a scientific PDF." : "Our AI engine is compiling your content, optimizing layouts, and generating a high-fidelity PDF document.")
+                : (selectedApp === 'ieee-maker' ? "Your IEEE formatted manuscript has been generated and the download should start automatically." : "Your PDF presentation has been generated and the download should start automatically.")}
             </p>
 
             <div className="flex flex-col gap-4">
               {!isGenerating && (
                 <div className="flex flex-col gap-4 w-full">
                   <button
-                    onClick={exportToPDF}
-                    className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-xl ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
+                    onClick={exportToHighFidelityPDF}
+                    disabled={isExporting}
+                    className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all hover:scale-[1.02] shadow-xl disabled:opacity-50 ${isDarkMode ? 'bg-white text-black shadow-white/5' : 'bg-black text-white shadow-black/10'}`}
                   >
-                    <Download className="w-5 h-5" /> Download PDF Again
+                    {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
+                    {isExporting ? "Processing..." : "Download PDF Again"}
                   </button>
                   <button
                     onClick={downloadNotes}
                     className="bg-blue-600 text-white py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                   >
-                    <FileText className="w-5 h-5" /> Download Notes (PDF)
+                    <FileText className="w-5 h-5" /> {selectedApp === 'ieee-maker' ? 'Download Research Brief' : 'Download Notes (PDF)'}
                   </button>
-                  <button
-                    onClick={handleFinalizePPTX}
-                    className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all ${isDarkMode ? 'bg-zinc-800 border border-zinc-700 text-white hover:bg-zinc-700' : 'bg-gray-100 text-black hover:bg-gray-200'}`}
-                  >
-                    <FileOutput className="w-5 h-5" /> Export as PPTX instead
-                  </button>
+                  {selectedApp !== 'ieee-maker' && (
+                    <button
+                      onClick={handleFinalizePPTX}
+                      className={`py-5 px-10 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all ${isDarkMode ? 'bg-zinc-800 border border-zinc-700 text-white hover:bg-zinc-700' : 'bg-gray-100 text-black hover:bg-gray-200'}`}
+                    >
+                      <FileOutput className="w-5 h-5" /> Export as PPTX instead
+                    </button>
+                  )}
                 </div>
               )}
               <button
                 onClick={handleReset}
                 className={`font-semibold py-4 transition-colors ${isDarkMode ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-black'}`}
               >
-                Create another presentation
+                {selectedApp === 'ieee-maker' ? 'Draft another manuscript' : 'Create another presentation'}
               </button>
             </div>
           </motion.div>

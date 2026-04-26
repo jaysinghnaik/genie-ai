@@ -103,12 +103,13 @@ ${relevantChunks.map(c => c.text).join("\n\n---\n\n")}
     const prompt = `
 Create a presentation slide for "${subtopic}" using ONLY the provided context.
 
-Rules:
-- Extract directly from chunks (no separate summarization step)
-- 4–5 bullet points only
-- Each point must clearly map to chunk content
-- No external knowledge
-- Keep language short and precise
+STRICT CONTENT RULES:
+- Extract directly from chunks.
+- 4–5 bullet points max.
+- CONTENT DISTILLATION: If a technical explanation exceeds 45 words, you MUST summarize it into 3 bullet points.
+- No single point should exceed 20 words.
+- Use precise, professional terminology.
+- No external knowledge.
 
 Return ONLY valid JSON:
 {
@@ -131,13 +132,14 @@ ${context}
     context: string
   ): Promise<VerificationResult> {
     const prompt = `
-Evaluate the slide based on provided chunks.
+Evaluate the slide based on provided chunks and layout constraints.
 
 Rules:
-- Check if each point is supported
-- Be strict but concise
-- Give a score (1–10)
-- List only critical issues (max 3)
+- Check if each point is supported.
+- CONTENT CHECK: Flag any point longer than 20 words or any overall group exceeding 45 words of dense text.
+- Be strict but concise.
+- Give a score (1–10).
+- List only critical issues (max 3).
 
 Return ONLY valid JSON:
 {
@@ -167,10 +169,11 @@ ${JSON.stringify(slide, null, 2)}
 Fix the slide using the issues.
 
 Rules:
-- Only fix incorrect points
-- Keep correct points unchanged
-- Use ONLY given chunks
-- Maintain 4–5 bullet points
+- Fix incorrect points OR points that are too long (> 20 words).
+- If context is too technical, apply Content Distillation (summarize into 3 sub-points).
+- Keep correct points unchanged.
+- Use ONLY given chunks.
+- Maintain 4–5 bullet points total.
 
 Return ONLY valid JSON:
 {

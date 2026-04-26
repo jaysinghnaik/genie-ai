@@ -1,6 +1,6 @@
 {
-  "name": "Genie AI Dashboard",
-  "description": "A centralized dashboard for Genie AI applications, featuring PPT and IEEE makers.",
+  "name": "Genie AI Workspace",
+  "description": "An advanced AI workspace for synthesizing high-fidelity presentations and IEEE academic manuscripts with automated formatting.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }
