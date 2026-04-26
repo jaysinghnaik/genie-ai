@@ -119,6 +119,8 @@ export default function App() {
   const [isIterating, setIsIterating] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAutoRunning, setIsAutoRunning] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [generationTimer, setGenerationTimer] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -683,6 +685,35 @@ Output ONLY the final code block (usually HTML/Tailwind).`;
     return () => clearInterval(interval);
   }, [isAILoading]);
 
+  // Automation Loop
+  useEffect(() => {
+    if (!isAutoRunning) return;
+
+    // Stop automation when we reach the summary
+    if (view === "ppt-summary-preview") {
+      setIsAutoRunning(false);
+      return;
+    }
+
+    // Only automate in the structural/entry views
+    if (view !== "ppt-structure-entry" && view !== "ppt-subtopic-entry") return;
+
+    if (!isAILoading) {
+      if (!aiPasteBuffer) {
+        // Trigger AI if buffer is empty
+        const trigger = view === "ppt-structure-entry" ? automatedStructureGeneration : automatedSubtopicGeneration;
+        trigger();
+      } else {
+        // Confirm content if buffer has something
+        const timer = setTimeout(() => {
+          const process = view === "ppt-structure-entry" ? handleStructureProcess : handleSubtopicProcess;
+          process();
+        }, 3000); // Give user 3 seconds to "observe"
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isAutoRunning, view, aiPasteBuffer, isAILoading, activeSubtopicIndex]);
+
   const handleStructureProcess = () => {
     if (!aiPasteBuffer.trim()) return;
     
@@ -822,15 +853,18 @@ Output ONLY the final code block (usually HTML/Tailwind).`;
 10. ALIGNMENT: Body text MUST be justified (text-justify).`;
 
     const slideRequirements = `Presentation Content Requirements:
-1. Design & Color Protocol (STRICT HEX ENFORCEMENT): 
+1. Design & Color Protocol (STRICT HEX ENFORCEMENT & THEME): 
+   - Theme: ${pptConfig.theme === 'dark' ? 'DARK MODE' : 'LIGHT MODE'}. 
+   - Use background color ${pptConfig.theme === 'dark' ? '#111827' : '#ffffff'} and text color ${pptConfig.theme === 'dark' ? '#f3f4f6' : '#000000'}.
    - Use ONLY 6-digit hex codes (e.g., #111827 for dark backgrounds) and standard RGBA. 
    - Modern oklch/oklab colors are STRICTLY FORBIDDEN.
    - REMOVE ALL Tailwind opacity modifiers (e.g., bg-white/10). Use explicit rgba().
-2. STRICT VERTICAL CONTAINMENT: 
-   - EACH slide MUST use the class 'slide-render-target'. It must fill exactly one 1920x1080 viewport.
+2. STRICT VERTICAL CONTAINMENT & RATIO: 
+   - SLIDE RATIO: ${pptConfig.ratio}.
+   - EACH slide MUST use the class 'slide-render-target'. It must fill exactly one ${pptConfig.ratio === '16:9' ? '1920x1080' : '1080x1920'} viewport.
    - INTERNAL STRUCTURE: Inside 'slide-render-target', use a div with class 'slide-content-area' for the main content (title + grid/body).
-   - THE 80% RULE: Content must strictly stay within 'slide-content-area' (fixed at 864px height). This prevents content from leaking into the footer or next slide.
-   - THE FOOTER ZONE: Reserve the bottom 216px (the 'slide-footer-area' class) for slide numbers or empty space.
+   - THE 80% RULE: Content must strictly stay within 'slide-content-area' (fixed at ${pptConfig.ratio === '16:9' ? '864px' : '1536px'} height). This prevents content from leaking into the footer or next slide.
+   - THE FOOTER ZONE: Reserve the bottom ${pptConfig.ratio === '16:9' ? '216px' : '384px'} (the 'slide-footer-area' class) for slide numbers or empty space.
 3. GRID GEOMETRY: 
    - For multi-card layouts, use a div with class 'slide-grid'. 
    - It MUST use 'grid-template-rows: repeat(2, 1fr);' and 'grid-template-columns: repeat(2, 1fr);' to force a 4-quadrant layout. This ensures no content leaks vertically.
@@ -851,14 +885,14 @@ STRICT REQUIREMENTS:
 ${isIEEE ? paperRequirements : slideRequirements}
 6. Feature: Add a prominent "Download as PDF" button.
 7. Functionality: CRITICAL - Use the "Native Print" method (window.print()) to export as PDF. 
-   - Design for @media print to ensure perfect ${isIEEE ? 'Letter size (8.5x11)' : '16:9 slide'} formatting.
+   - Design for @media print to ensure perfect ${isIEEE ? 'Letter size (8.5x11)' : `16:9 slide`} formatting.
    - Ensure each ${isIEEE ? 'page' : 'slide'} has 'page-break-after: always'.
 8. STABILITY: 
    - Animations, transitions, and unintended layout shifts are STRICTLY FORBIDDEN.
    - The rendered HTML must be static and stable for high-fidelity capture.
 9. Icon Protocol: For "Storage" or power related sections, use a proper Battery icon.
 
-IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No modern color formats. ${isIEEE ? 'Layout must be professional white paper format.' : 'Each slide must be a perfect 16:9 rectangle.'}`;
+IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No modern color formats. ${isIEEE ? 'Layout must be professional white paper format.' : `Each slide must be a perfect 16:9 rectangle.`}`;
 
     setCurrentPrompt(prompt);
     setView("ppt-generation-prompt");
@@ -1139,22 +1173,60 @@ IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No mod
 
       {/* Settings Drawer (Left Corner) */}
       <AnimatePresence>
-        {isSettingsOpen && (
-          <>
+        {/* Video Overlay (60% Screen Center) */}
+        {selectedVideo && (
+          <motion.div
+            key="video-player-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-[200] flex items-center justify-center p-4"
+            onClick={() => setSelectedVideo(null)}
+          >
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSettingsOpen(false)}
-              className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className={`fixed top-0 left-0 bottom-0 z-[110] w-full max-w-sm shadow-2xl overflow-y-auto ${isDarkMode ? 'bg-zinc-900 border-r border-zinc-800' : 'bg-white border-r border-gray-100'}`}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-[60vw] aspect-video relative rounded-3xl overflow-hidden shadow-2xl border border-white/10"
+              onClick={(e) => e.stopPropagation()}
             >
+              <iframe
+                className="w-full h-full"
+                src={`https://www.youtube.com/embed/${selectedVideo}?autoplay=1`}
+                title="YouTube video player"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              ></iframe>
+              <button 
+                onClick={() => setSelectedVideo(null)}
+                className="absolute top-4 right-4 p-2 bg-black/40 hover:bg-black/60 rounded-full text-white backdrop-blur-md transition-all border border-white/20"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isSettingsOpen && (
+          <motion.div
+            key="settings-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsSettingsOpen(false)}
+            className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm"
+          />
+        )}
+        {isSettingsOpen && (
+          <motion.div
+            key="settings-panel"
+            initial={{ x: "-100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "-100%" }}
+            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            className={`fixed top-0 left-0 bottom-0 z-[110] w-full max-w-sm shadow-2xl overflow-y-auto ${isDarkMode ? 'bg-zinc-900 border-r border-zinc-800' : 'bg-white border-r border-gray-100'}`}
+          >
               <div className="p-8">
                 <div className="flex items-center justify-between mb-10">
                   <h2 className={`text-2xl font-display font-bold ${isDarkMode ? 'text-white' : 'text-black'}`}>Studio Dashboard</h2>
@@ -1305,21 +1377,57 @@ IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No mod
                       >
                         {isKeySaved ? <><Check className="w-4 h-4" /> Saved</> : "Apply Key"}
                       </button>
+
+                      <div className="flex items-center gap-2 py-1">
+                        <div className={`h-px flex-1 ${isDarkMode ? 'bg-zinc-800' : 'bg-gray-100'}`} />
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-2">or</span>
+                        <div className={`h-px flex-1 ${isDarkMode ? 'bg-zinc-800' : 'bg-gray-100'}`} />
+                      </div>
+
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`w-full py-3 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-dashed ${isDarkMode ? 'border-zinc-700 text-zinc-400 hover:text-white hover:border-blue-500 hover:bg-blue-500/5' : 'border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50'}`}
+                      >
+                        Create API Key
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
                   </div>
 
-                  {/* Tutorial Option */}
-                  <div className={`p-5 rounded-2xl flex items-center justify-between group cursor-pointer transition-all ${isDarkMode ? 'bg-zinc-800/40 border border-zinc-700 hover:bg-zinc-800/60' : 'bg-white border border-gray-100 hover:border-gray-300'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2.5 rounded-xl ${isDarkMode ? 'bg-zinc-700 text-orange-400' : 'bg-orange-50 text-orange-600 shadow-sm border border-orange-100'}`}>
-                        <RefreshCw className="w-4 h-4" />
+                  {/* Tutorial Video Section */}
+                  <div className={`p-4 rounded-2xl border ${isDarkMode ? 'bg-zinc-800/20 border-zinc-700/50' : 'bg-gray-50/50 border-gray-100 shadow-sm'}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="p-1.5 rounded-lg bg-red-500/10 text-red-500">
+                        <Play className="w-3.5 h-3.5 fill-current" />
                       </div>
-                      <div>
-                        <p className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-black'}`}>Show Tutorial</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase">Coming Soon</p>
+                      <h3 className={`text-[10px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-zinc-400' : 'text-gray-500'}`}>Recommended Tutorial</h3>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setSelectedVideo("_391cYCpdxI")}
+                      className="group cursor-pointer rounded-xl overflow-hidden relative"
+                    >
+                      <img 
+                        src="https://img.youtube.com/vi/_391cYCpdxI/maxresdefault.jpg"
+                        alt="Tutorial"
+                        className="w-full aspect-video object-cover transition-transform duration-500 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg scale-90 group-hover:scale-100 transition-all">
+                          <Play className="w-5 h-5 fill-current" />
+                        </div>
+                      </div>
+                      <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/70 rounded text-[9px] font-bold text-white uppercase backdrop-blur-md">
+                        0:26
                       </div>
                     </div>
-                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-black transition-transform group-hover:translate-x-1" />
+                    
+                    <div className="mt-3">
+                      <h4 className={`font-bold text-xs mb-1 ${isDarkMode ? 'text-white' : 'text-zinc-900'}`}>CREATE YOUR FREE GEMINI API KEY</h4>
+                      <p className="text-[10px] text-gray-500 leading-relaxed">Step by step execution of creating free API Key to run GENIE AI.</p>
+                    </div>
                   </div>
 
                   {/* About Section (Collapsible) */}
@@ -1359,7 +1467,6 @@ IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No mod
                 </div>
               </div>
             </motion.div>
-          </>
         )}
       </AnimatePresence>
       {/* Background decoration */}
@@ -1858,7 +1965,7 @@ IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No mod
                   <div className={`p-2 rounded-lg ${isDarkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
                     <Terminal className="w-4 h-4" />
                   </div>
-                  <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Step {view === "ppt-structure-entry" ? '01' : `02 - ${activeSubtopicIndex + 1}/5`}</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-gray-400">Step {view === "ppt-structure-entry" ? '01' : `02 - ${activeSubtopicIndex + 1}/${subtopics.length}`}</span>
                 </div>
 
                 <h3 className={`text-2xl font-display font-medium mb-6 ${isDarkMode ? 'text-white' : 'text-black'}`}>
@@ -1880,10 +1987,27 @@ IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No mod
                 </div>
 
                 <div className="space-y-4">
-                  <p className="text-xs text-gray-400 leading-relaxed uppercase tracking-wide font-bold">Automation Active</p>
-                  <p className="text-sm text-gray-500">
-                    The prompt is ready. Click "Run AI for this Step" to automatically generate the content using GENIE AI.
-                  </p>
+                  <button 
+                    onClick={() => setIsAutoRunning(!isAutoRunning)}
+                    className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isAutoRunning ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20' : isDarkMode ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 shadow-sm'}`}
+                  >
+                    {isAutoRunning ? (
+                      <><Pause className="w-4 h-4" /> Stop Automation</>
+                    ) : (
+                      <><Sparkles className="w-4 h-4" /> Run all steps automatic</>
+                    )}
+                  </button>
+
+                  <div className="pt-2">
+                    <p className="text-xs text-gray-400 leading-relaxed uppercase tracking-wide font-bold">
+                      {isAutoRunning ? "Automation Active" : "Manual Control"}
+                    </p>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {isAutoRunning 
+                        ? "GENIE AI is navigating through steps automatically. You can pause anytime."
+                        : "Click the buttons above to automate the entire process or proceed manually."}
+                    </p>
+                  </div>
                 </div>
               </div>
 
