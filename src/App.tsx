@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from "motion/react";
 import pptxgen from "pptxgenjs";
 import { GoogleGenAI, Type } from "@google/genai";
 import { 
-  Presentation, FileText, Sparkles, ArrowRight, Github, ChevronLeft, 
+  Presentation, FileText, Sparkles, ArrowRight, Linkedin, ChevronLeft, 
   Layout, Palette, Moon, Sun, Hash, Wand2, Image as ImageIcon, 
   Video, Play, Pause, ChevronRight, CheckCircle2, Download, RefreshCw,
   Loader2, Eye, EyeOff, FileOutput, Heart, Copy, ExternalLink, Terminal,
@@ -1638,8 +1638,8 @@ IMPORTANT: Stated strictly: Use ONLY 6-digit hex codes and standard RGBA. No mod
               <div className="flex items-center gap-8 text-gray-400">
                 <a href="#" className="hover:text-current transition-colors text-sm font-medium">Privacy</a>
                 <a href="#" className="hover:text-current transition-colors text-sm font-medium">Terms</a>
-                <a href="#" className="hover:text-current transition-colors">
-                  <Github className="w-5 h-5" />
+                <a href="https://www.linkedin.com/in/gangavath-jay-singh-naik" target="_blank" rel="noopener noreferrer" className="hover:text-current transition-colors">
+                  <Linkedin className="w-5 h-5" />
                 </a>
               </div>
             </footer>
